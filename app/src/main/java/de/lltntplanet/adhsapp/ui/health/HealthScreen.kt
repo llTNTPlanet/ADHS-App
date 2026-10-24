@@ -126,9 +126,17 @@ class HealthViewModel(private val c: AppContainer) : ViewModel() {
         }
     }
 
+    /** Freigabe kappen und neu verbinden – der Google-Zustimmungsbildschirm erscheint erneut. */
+    fun reconnect(connect: (GoogleFeature) -> Unit) {
+        viewModelScope.launch {
+            c.auth.reset(GoogleFeature.HEALTH)
+            connect(GoogleFeature.HEALTH)
+        }
+    }
+
     fun disconnect() {
         viewModelScope.launch {
-            c.auth.revoke(GoogleFeature.HEALTH)
+            c.auth.reset(GoogleFeature.HEALTH)
             c.health.clear()
             c.settings.update { it.copy(healthConnected = false) }
         }
@@ -202,7 +210,10 @@ fun HealthScreen(modifier: Modifier = Modifier) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                TextButton(onClick = vm::disconnect) { Text("Google Health trennen") }
+                Row {
+                    TextButton(onClick = { vm.reconnect(connect) }) { Text("Neu verbinden") }
+                    TextButton(onClick = vm::disconnect) { Text("Google Health trennen") }
+                }
             } else if (settings.healthConnected && loading) {
                 Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             }

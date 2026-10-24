@@ -98,6 +98,15 @@ class GoogleAuth(private val context: Context, private val settings: SettingsRep
         }.onFailure { Log.w(TAG, "revokeAccess fehlgeschlagen", it) }
     }
 
+    /** Freigabe bei Google zurückziehen, damit der Zustimmungsbildschirm beim nächsten Verbinden wieder erscheint. */
+    suspend fun reset(feature: GoogleFeature) {
+        when (val r = runCatching { client.authorize(request(feature)).await() }.getOrNull()?.let { handle(it) }) {
+            is TokenResult.Token -> invalidate(r.accessToken)
+            else -> Unit
+        }
+        revoke(feature)
+    }
+
     private fun describe(e: ApiException): String = when {
         e.statusCode == CommonStatusCodes.INTERNAL_ERROR || e.message?.contains("UNREGISTERED_ON_API_CONSOLE") == true ->
             "Google kennt diese App noch nicht. Einmalig in der Google Cloud Console einen Android-OAuth-Client anlegen " +

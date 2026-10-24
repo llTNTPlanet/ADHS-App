@@ -90,12 +90,15 @@ class GoogleHttp(
             val apiMessage = runCatching {
                 GoogleJson.parseToJsonElement(body).jsonObject["error"]?.jsonObject?.get("message")?.jsonPrimitive?.content
             }.getOrNull()
-            val hint = when (code) {
-                401 -> "Anmeldung abgelaufen."
-                403 -> "Zugriff verweigert – ist die API im Google-Cloud-Projekt aktiviert und dein Konto als Testnutzer eingetragen?"
-                404 -> "Nicht gefunden."
-                429 -> "Zu viele Anfragen – bitte später erneut versuchen."
-                in 500..599 -> "Google-Dienst gerade nicht erreichbar."
+            val hint = when {
+                code == 403 && apiMessage?.contains("disallowed OAuth scope", ignoreCase = true) == true ->
+                    "Dieser Datenbereich ist im Google-Cloud-Projekt noch nicht freigegeben: Google Auth Platform → " +
+                        "Datenzugriff → fehlenden Bereich hinzufügen (siehe README), danach in der App „Neu verbinden“."
+                code == 401 -> "Anmeldung abgelaufen."
+                code == 403 -> "Zugriff verweigert – ist die API im Google-Cloud-Projekt aktiviert und dein Konto als Testnutzer eingetragen?"
+                code == 404 -> "Nicht gefunden."
+                code == 429 -> "Zu viele Anfragen – bitte später erneut versuchen."
+                code in 500..599 -> "Google-Dienst gerade nicht erreichbar."
                 else -> "HTTP $code"
             }
             return if (apiMessage.isNullOrBlank()) hint else "$hint ($apiMessage)"
