@@ -12,12 +12,18 @@ import de.lltntplanet.adhsapp.data.google.GoogleTasksApi
 import de.lltntplanet.adhsapp.data.google.GoogleTasksSync
 import de.lltntplanet.adhsapp.data.google.HealthApi
 import de.lltntplanet.adhsapp.data.health.HealthRepository
+import de.lltntplanet.adhsapp.data.settings.SecretStore
 import de.lltntplanet.adhsapp.data.settings.SettingsRepository
 import de.lltntplanet.adhsapp.data.tasks.TaskRepository
 import de.lltntplanet.adhsapp.reminders.CalendarChangeWorker
 import de.lltntplanet.adhsapp.reminders.MaintenanceWorker
 import de.lltntplanet.adhsapp.reminders.ReminderEngine
 import de.lltntplanet.adhsapp.reminders.ReminderNotifier
+import de.lltntplanet.adhsapp.update.ApkInstaller
+import de.lltntplanet.adhsapp.update.GitHubReleaseClient
+import de.lltntplanet.adhsapp.update.UpdateManager
+import de.lltntplanet.adhsapp.update.UpdateNotifier
+import de.lltntplanet.adhsapp.update.UpdateWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -33,7 +39,9 @@ open class AdhsApp : Application() {
         super.onCreate()
         container = AppContainer(this)
         container.notifier.createChannels()
+        container.updateNotifier.createChannel()
         MaintenanceWorker.ensureScheduled(this)
+        UpdateWorker.ensureScheduled(this)
         CalendarChangeWorker.enqueue(this)
         container.requestReschedule()
     }
@@ -56,6 +64,10 @@ class AppContainer(app: Application) {
 
     val notifier = ReminderNotifier(app)
     val reminderEngine = ReminderEngine(app, calendar, birthdays, db.taskDao(), db.reminderDao(), settings)
+
+    val secrets = SecretStore(app)
+    val updateNotifier = UpdateNotifier(app)
+    val updates = UpdateManager(app, settings, secrets, GitHubReleaseClient(), ApkInstaller(app), updateNotifier, scope)
 
     private var rescheduleJob: Job? = null
 

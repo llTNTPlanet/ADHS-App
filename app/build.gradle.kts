@@ -6,9 +6,15 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-// Optionale Release-Signatur, z. B. aus GitHub-Actions-Secrets:
-// ADHS_KEYSTORE_FILE, ADHS_KEYSTORE_PASSWORD, ADHS_KEY_ALIAS, ADHS_KEY_PASSWORD
-val releaseKeystore: String? = System.getenv("ADHS_KEYSTORE_FILE")
+// Release-Signatur: Die Release-Pipeline legt den Schlüssel aus dem Secret SIGNING_KEYSTORE_BASE64 als
+// signing/release.p12 ab (nie im Repo) und übergibt das Passwort als ADHS_SIGNING_PASSWORD.
+// Alle Updates müssen mit demselben Schlüssel signiert sein, sonst lehnt Android die Installation ab.
+val signingPassword: String? = System.getenv("ADHS_SIGNING_PASSWORD")?.takeIf { it.isNotBlank() }
+val releaseKeystore = file("signing/release.p12")
+
+// Versionsnummern setzt die Release-Pipeline (-PversionCode=… -PversionName=…).
+val ciVersionCode = (findProperty("versionCode") as String?)?.toIntOrNull()
+val ciVersionName = findProperty("versionName") as String?
 
 android {
     namespace = "de.lltntplanet.adhsapp"
@@ -18,29 +24,33 @@ android {
         applicationId = "de.lltntplanet.adhsapp"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = ciVersionCode ?: 1
+        versionName = ciVersionName ?: "0.1.0-dev"
+
+        // Hier sucht die App nach neuen Versionen (GitHub-Releases).
+        buildConfigField("String", "UPDATE_REPO_OWNER", "\"llTNTPlanet\"")
+        buildConfigField("String", "UPDATE_REPO_NAME", "\"ADHS-App\"")
     }
 
     signingConfigs {
-        if (releaseKeystore != null) {
+        if (signingPassword != null && releaseKeystore.exists()) {
             create("release") {
-                storeFile = file(releaseKeystore)
-                storePassword = System.getenv("ADHS_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("ADHS_KEY_ALIAS")
-                keyPassword = System.getenv("ADHS_KEY_PASSWORD")
+                storeFile = releaseKeystore
+                storeType = "pkcs12"
+                storePassword = signingPassword
+                keyAlias = "adhs"
+                keyPassword = signingPassword
             }
         }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // Bewusst ohne R8: Ein Update darf nie an Code-Verkleinerung scheitern, sonst kommt man
+            // aus einer kaputten Version nicht mehr per Selbst-Update heraus.
+            isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            if (releaseKeystore != null) {
-                signingConfig = signingConfigs.getByName("release")
-            }
+            signingConfigs.findByName("release")?.let { signingConfig = it }
         }
     }
 

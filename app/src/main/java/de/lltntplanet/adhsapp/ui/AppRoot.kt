@@ -41,6 +41,7 @@ import de.lltntplanet.adhsapp.ui.settings.SettingsScreen
 import de.lltntplanet.adhsapp.ui.settings.SetupScreen
 import de.lltntplanet.adhsapp.ui.tasks.TasksScreen
 import de.lltntplanet.adhsapp.ui.today.TodayScreen
+import de.lltntplanet.adhsapp.ui.update.UpdateDialogHost
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 
@@ -152,4 +153,5 @@ fun AppRoot(requestedTab: Tab?, onTabHandled: () -> Unit) {
             }
         }
     }
+    UpdateDialogHost()
 }

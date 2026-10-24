@@ -1,0 +1,91 @@
+name: Release
+
+# Jede Änderung auf main wird automatisch als neue Version veröffentlicht.
+# Die App findet das Release und aktualisiert sich (Einstellungen → App-Updates).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      # Signaturschlüssel (PKCS12, Alias "adhs") und Passwort als Repository-Secrets.
+      SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+      ADHS_SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Signatur-Secrets prüfen
+        if: env.SIGNING_KEYSTORE_BASE64 == '' || env.ADHS_SIGNING_PASSWORD == ''
+        run: |
+          echo "::error::Repository-Secrets SIGNING_KEYSTORE_BASE64 und SIGNING_PASSWORD fehlen (Settings → Secrets and variables → Actions). Ohne festen Schlüssel kann sich die App nicht selbst aktualisieren – siehe README, Abschnitt App-Updates."
+          exit 1
+
+      - name: Signaturschlüssel bereitstellen
+        run: |
+          mkdir -p app/signing
+          echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > app/signing/release.p12
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Version festlegen
+        id: version
+        run: |
+          echo "code=$((GITHUB_RUN_NUMBER + 1))" >> "$GITHUB_OUTPUT"
+          echo "name=1.0.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+
+      - name: Tests und signierte APK
+        run: >
+          ./gradlew testDebugUnitTest assembleRelease
+          -PversionCode=${{ steps.version.outputs.code }}
+          -PversionName=${{ steps.version.outputs.name }}
+
+      - name: Signatur prüfen
+        run: |
+          APK=app/build/outputs/apk/release/app-release.apk
+          test -f "$APK" || { echo "::error::Signierte APK fehlt"; exit 1; }
+          APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/apksigner"
+          "$APKSIGNER" verify --print-certs "$APK" | grep -i "SHA-1"
+
+      - name: Release-Notizen
+        env:
+          CODE: ${{ steps.version.outputs.code }}
+        run: |
+          PREV=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          {
+            echo "<!-- versionCode: $CODE -->"
+            echo "Änderungen:"
+            if [ -n "$PREV" ]; then
+              git log --no-merges --pretty='- %s' "$PREV"..HEAD
+            else
+              git log --no-merges --pretty='- %s' -n 20
+            fi
+          } > release-notes.md
+          cat release-notes.md
+
+      - name: GitHub-Release veröffentlichen
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NAME: ${{ steps.version.outputs.name }}
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk adhs-app.apk
+          gh release create "v$NAME" adhs-app.apk \
+            --title "ADHS App $NAME" \
+            --notes-file release-notes.md \
+            --target "$GITHUB_SHA"

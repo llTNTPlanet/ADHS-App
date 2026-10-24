@@ -20,7 +20,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        if (savedInstanceState == null) requestedTab = tabFrom(intent)
+        if (savedInstanceState == null) {
+            requestedTab = tabFrom(intent)
+            showUpdateIfRequested(intent)
+        }
         setContent {
             AdhsTheme {
                 AppRoot(requestedTab = requestedTab, onTabHandled = { requestedTab = null })
@@ -31,11 +34,18 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         tabFrom(intent)?.let { requestedTab = it }
+        showUpdateIfRequested(intent)
+    }
+
+    private fun showUpdateIfRequested(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_SHOW_UPDATE, false) == true) (application as AdhsApp).container.updates.showDialog()
     }
 
     override fun onResume() {
         super.onResume()
-        (application as AdhsApp).container.requestReschedule()
+        val container = (application as AdhsApp).container
+        container.requestReschedule()
+        container.updates.onAppResumed()
     }
 
     private fun tabFrom(intent: Intent?): Tab? = when (intent?.getStringExtra(EXTRA_TAB)) {
@@ -47,5 +57,6 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_TAB = "tab"
+        const val EXTRA_SHOW_UPDATE = "show_update"
     }
 }

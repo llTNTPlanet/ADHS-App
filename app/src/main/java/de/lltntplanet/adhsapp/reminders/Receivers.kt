@@ -6,6 +6,9 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import de.lltntplanet.adhsapp.AdhsApp
+import de.lltntplanet.adhsapp.BuildConfig
+import de.lltntplanet.adhsapp.update.ApkInstaller
+import de.lltntplanet.adhsapp.update.UpdateWorker
 import de.lltntplanet.adhsapp.data.google.GoogleJson
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
@@ -77,13 +80,18 @@ class ReminderActionReceiver : BroadcastReceiver() {
 class SystemEventsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action !in HANDLED_ACTIONS) return
-        reschedule(context)
+        reschedule(context, intent.action)
     }
 
-    private fun reschedule(context: Context) = runAsync(context) { app ->
+    private fun reschedule(context: Context, action: String?) = runAsync(context) { app ->
         MaintenanceWorker.ensureScheduled(context)
+        UpdateWorker.ensureScheduled(context)
         CalendarChangeWorker.enqueue(context)
         app.container.reminderEngine.reschedule()
+        if (action == Intent.ACTION_MY_PACKAGE_REPLACED) {
+            ApkInstaller.cleanup(context)
+            app.container.updateNotifier.notifyUpdated(BuildConfig.VERSION_NAME)
+        }
     }
 
     companion object {

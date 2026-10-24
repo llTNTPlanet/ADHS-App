@@ -56,6 +56,12 @@ data class AppSettings(
     val saveNewTasksToGoogle: Boolean = true,
     val lastTasksSync: Long = 0L,
     val onboardingDone: Boolean = false,
+    /** Neue Versionen von GitHub automatisch herunterladen und installieren. */
+    val autoInstallUpdates: Boolean = true,
+    val lastUpdateCheck: Long = 0L,
+    /** Version, deren Hinweis mit "Später" weggeklickt wurde, und wann. */
+    val dismissedUpdateCode: Int = 0,
+    val dismissedUpdateAt: Long = 0L,
 )
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -87,6 +93,10 @@ class SettingsRepository(private val context: Context) {
         val saveNewTasksToGoogle = booleanPreferencesKey("save_new_tasks_to_google")
         val lastTasksSync = longPreferencesKey("last_tasks_sync")
         val onboardingDone = booleanPreferencesKey("onboarding_done")
+        val autoInstallUpdates = booleanPreferencesKey("auto_install_updates")
+        val lastUpdateCheck = longPreferencesKey("last_update_check")
+        val dismissedUpdateCode = intPreferencesKey("dismissed_update_code")
+        val dismissedUpdateAt = longPreferencesKey("dismissed_update_at")
         val healthCache = stringPreferencesKey("health_cache")
     }
 
@@ -125,6 +135,10 @@ class SettingsRepository(private val context: Context) {
             saveNewTasksToGoogle = this[Keys.saveNewTasksToGoogle] ?: d.saveNewTasksToGoogle,
             lastTasksSync = this[Keys.lastTasksSync] ?: d.lastTasksSync,
             onboardingDone = this[Keys.onboardingDone] ?: d.onboardingDone,
+            autoInstallUpdates = this[Keys.autoInstallUpdates] ?: d.autoInstallUpdates,
+            lastUpdateCheck = this[Keys.lastUpdateCheck] ?: d.lastUpdateCheck,
+            dismissedUpdateCode = this[Keys.dismissedUpdateCode] ?: d.dismissedUpdateCode,
+            dismissedUpdateAt = this[Keys.dismissedUpdateAt] ?: d.dismissedUpdateAt,
         )
     }
 
@@ -161,6 +175,10 @@ class SettingsRepository(private val context: Context) {
         this[Keys.saveNewTasksToGoogle] = s.saveNewTasksToGoogle
         this[Keys.lastTasksSync] = s.lastTasksSync
         this[Keys.onboardingDone] = s.onboardingDone
+        this[Keys.autoInstallUpdates] = s.autoInstallUpdates
+        this[Keys.lastUpdateCheck] = s.lastUpdateCheck
+        this[Keys.dismissedUpdateCode] = s.dismissedUpdateCode
+        this[Keys.dismissedUpdateAt] = s.dismissedUpdateAt
     }
 
     /** Zwischenspeicher der zuletzt geladenen Gesundheitsdaten (JSON). */
