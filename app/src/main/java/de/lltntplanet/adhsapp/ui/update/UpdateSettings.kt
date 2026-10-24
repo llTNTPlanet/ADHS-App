@@ -101,7 +101,7 @@ fun UpdateSettingsSection() {
 
     Label("GitHub-Token (nur für ein privates Repository)")
     Text(
-        if (savedToken != null) "Token ist gespeichert." else "Kein Token gespeichert – für ein privates Repository nötig.",
+        if (savedToken != null) "Token ist gespeichert." else "Kein Token gespeichert – bei einem öffentlichen Repository nicht nötig.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
