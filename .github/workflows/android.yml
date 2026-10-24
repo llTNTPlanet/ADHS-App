@@ -1,0 +1,46 @@
+name: Android
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # Optional: eigener Debug-Keystore (base64), damit der SHA-1 für Google-Anmeldung stabil bleibt.
+      DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Debug-Keystore aus Secret
+        if: env.DEBUG_KEYSTORE_BASE64 != ''
+        run: |
+          mkdir -p ~/.android
+          echo "$DEBUG_KEYSTORE_BASE64" | base64 -d > ~/.android/debug.keystore
+
+      - name: Lint, Tests und APK
+        run: ./gradlew lintDebug testDebugUnitTest assembleDebug
+
+      - name: SHA-1 für den Android-OAuth-Client anzeigen
+        run: ./gradlew :app:signingReport | grep -E "^(Variant|SHA1)" | head -n 4
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: adhs-app-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: reports
+          path: app/build/reports
