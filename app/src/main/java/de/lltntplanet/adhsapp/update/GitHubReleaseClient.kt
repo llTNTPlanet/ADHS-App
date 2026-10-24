@@ -74,7 +74,8 @@ class GitHubReleaseClient(
                 response.isSuccessful -> GoogleJson.decodeFromString<GitHubRelease>(text)
                 response.code == 404 -> throw UpdateCheckException(
                     if (token.isNullOrBlank()) {
-                        "Keine Version gefunden. Ist das Repository privat? Dann bitte in den Einstellungen einen GitHub-Token eintragen."
+                        "Noch keine Version veröffentlicht (unter GitHub → Releases). Falls das Repository privat ist: " +
+                            "in den Einstellungen einen GitHub-Token eintragen."
                     } else {
                         "Noch keine Version veröffentlicht – oder der Token hat keinen Zugriff auf das Repository."
                     },

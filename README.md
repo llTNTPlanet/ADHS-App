@@ -155,10 +155,10 @@ Hintergrund (alle 4 Stunden) nach einer neueren Version:
    ```
    Alle Versionen müssen mit diesem Schlüssel signiert sein, sonst lehnt Android Updates ab –
    Schlüssel und Passwort gut aufbewahren. Der Schlüssel gehört nie ins Repository.
-2. **Privates Repository → Token in der App:** *Einstellungen → App-Updates → Token erstellen* öffnet GitHub
+2. **Nur bei privatem Repository → Token in der App:** *Einstellungen → App-Updates → Token erstellen* öffnet GitHub
    mit vorausgefülltem Formular (nur Lesezugriff auf Inhalte). Dort unter *Repository access* „Only select
    repositories“ → `ADHS-App` wählen, Token erzeugen, kopieren und in der App einfügen → *Speichern*.
-   (Ist das Repository öffentlich, braucht es keinen Token.)
+   Ist das Repository öffentlich (wie `llTNTPlanet/ADHS-App`), braucht es keinen Token.
 3. **„Unbekannte Apps installieren“** für ADHS App erlauben (die App fragt beim ersten Update danach).
 4. **Einmalig umsteigen:** Eine Testversion aus *Actions* ist mit einem anderen Schlüssel signiert. Diese einmal
    deinstallieren und die APK aus dem ersten Release installieren – danach kommen alle Updates automatisch.
