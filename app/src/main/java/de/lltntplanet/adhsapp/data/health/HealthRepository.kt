@@ -2,6 +2,9 @@ package de.lltntplanet.adhsapp.data.health
 
 import de.lltntplanet.adhsapp.data.google.DailyRollupDataPoint
 import de.lltntplanet.adhsapp.data.google.DataPoint
+import de.lltntplanet.adhsapp.data.google.GoogleApiException
+import de.lltntplanet.adhsapp.data.google.GoogleAuth
+import de.lltntplanet.adhsapp.data.google.GoogleFeature
 import de.lltntplanet.adhsapp.data.google.GoogleJson
 import de.lltntplanet.adhsapp.data.google.HealthApi
 import de.lltntplanet.adhsapp.data.google.NotAuthorizedException
@@ -66,6 +69,7 @@ data class HealthSnapshot(
 class HealthRepository(
     private val api: HealthApi,
     private val settings: SettingsRepository,
+    private val auth: GoogleAuth,
 ) {
     val snapshot: Flow<HealthSnapshot?> = settings.healthCache.map { json ->
         json?.let { runCatching { GoogleJson.decodeFromString<HealthSnapshot>(it) }.getOrNull() }
@@ -73,6 +77,18 @@ class HealthRepository(
 
     /** Lädt die letzten 7 Tage. Einzelne Bereiche dürfen fehlschlagen, ohne alles zu blockieren. */
     suspend fun refresh(today: LocalDate = LocalDate.now(), zone: ZoneId = ZoneId.systemDefault()): HealthSnapshot =
+        try {
+            load(today, zone)
+        } catch (e: GoogleApiException) {
+            // Google lehnt das ganze Token ab, wenn ein Bereich im Cloud-Projekt nicht freigegeben ist.
+            // Diesen Bereich weglassen und mit den erlaubten Bereichen neu anmelden.
+            val blocked = e.disallowedScopes
+            if (blocked.isEmpty()) throw e
+            auth.blockScopes(GoogleFeature.HEALTH, blocked)
+            load(today, zone)
+        }
+
+    private suspend fun load(today: LocalDate, zone: ZoneId): HealthSnapshot =
         coroutineScope {
             val start = today.minusDays(6)
             val end = today.plusDays(1)
@@ -107,7 +123,9 @@ class HealthRepository(
             val failures = results.mapNotNull { (k, v) -> v.exceptionOrNull()?.let { k to it } }
             if (failures.size == results.size) {
                 // Nichts ging – meistens fehlt die Anmeldung. Den ersten Fehler weiterreichen.
-                throw failures.firstOrNull { it.second is NotAuthorizedException }?.second ?: failures.first().second
+                throw failures.firstOrNull { it.second is NotAuthorizedException }?.second
+                    ?: failures.firstOrNull { (it.second as? GoogleApiException)?.disallowedScopes?.isNotEmpty() == true }?.second
+                    ?: failures.first().second
             }
             val snapshot = HealthMapper.build(
                 fetchedAt = System.currentTimeMillis(),

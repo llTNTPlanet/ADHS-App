@@ -129,6 +129,7 @@ class HealthViewModel(private val c: AppContainer) : ViewModel() {
     /** Freigabe kappen und neu verbinden – der Google-Zustimmungsbildschirm erscheint erneut. */
     fun reconnect(connect: (GoogleFeature) -> Unit) {
         viewModelScope.launch {
+            c.auth.unblockScopes(GoogleFeature.HEALTH)
             c.auth.reset(GoogleFeature.HEALTH)
             connect(GoogleFeature.HEALTH)
         }
@@ -203,6 +204,19 @@ fun HealthScreen(modifier: Modifier = Modifier) {
             }
             val s = snapshot
             if (s != null && settings.healthConnected) {
+                val blocked = settings.blockedGoogleScopes.filter { it in GoogleFeature.HEALTH.scopes }
+                if (blocked.isNotEmpty()) {
+                    InfoCard(
+                        icon = Icons.Filled.HealthAndSafety,
+                        title = "Ein Datenbereich ist deaktiviert",
+                        text = "Google gibt diesen Bereich für dein Cloud-Projekt nicht frei, deshalb wird er weggelassen:\n" +
+                            blocked.joinToString("\n") { "• " + it.substringAfterLast("googlehealth.").removeSuffix(".readonly") } +
+                            "\n\nZum Freischalten: Google Cloud Console → Google Auth Platform → Datenzugriff → Bereich hinzufügen, " +
+                            "dann hier „Neu verbinden“.",
+                        buttonText = "Neu verbinden",
+                        onClick = { vm.reconnect(connect) },
+                    )
+                }
                 HealthContent(s, settings.stepGoal)
                 Text(
                     "Zuletzt aktualisiert: ${TimeFormat.relativeDay(de.lltntplanet.adhsapp.util.Dates.toLocalDate(s.fetchedAt))}, " +

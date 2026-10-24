@@ -120,6 +120,7 @@ class SettingsViewModel(private val c: AppContainer) : ViewModel() {
     /** Freigabe kappen und sofort neu verbinden – Google zeigt dann den Zustimmungsbildschirm erneut. */
     fun reconnect(feature: GoogleFeature, connect: (GoogleFeature) -> Unit) {
         viewModelScope.launch {
+            c.auth.unblockScopes(feature)
             c.auth.reset(feature)
             connect(feature)
         }

@@ -55,6 +55,8 @@ data class AppSettings(
     val googleAccount: String? = null,
     val saveNewTasksToGoogle: Boolean = true,
     val lastTasksSync: Long = 0L,
+    /** Google-Bereiche, die das Cloud-Projekt nicht freigibt – werden bei der Anmeldung weggelassen. */
+    val blockedGoogleScopes: Set<String> = emptySet(),
     val onboardingDone: Boolean = false,
     /** Neue Versionen von GitHub automatisch herunterladen und installieren. */
     val autoInstallUpdates: Boolean = true,
@@ -92,6 +94,7 @@ class SettingsRepository(private val context: Context) {
         val googleAccount = stringPreferencesKey("google_account")
         val saveNewTasksToGoogle = booleanPreferencesKey("save_new_tasks_to_google")
         val lastTasksSync = longPreferencesKey("last_tasks_sync")
+        val blockedGoogleScopes = stringSetPreferencesKey("blocked_google_scopes")
         val onboardingDone = booleanPreferencesKey("onboarding_done")
         val autoInstallUpdates = booleanPreferencesKey("auto_install_updates")
         val lastUpdateCheck = longPreferencesKey("last_update_check")
@@ -134,6 +137,7 @@ class SettingsRepository(private val context: Context) {
             googleAccount = this[Keys.googleAccount],
             saveNewTasksToGoogle = this[Keys.saveNewTasksToGoogle] ?: d.saveNewTasksToGoogle,
             lastTasksSync = this[Keys.lastTasksSync] ?: d.lastTasksSync,
+            blockedGoogleScopes = this[Keys.blockedGoogleScopes] ?: d.blockedGoogleScopes,
             onboardingDone = this[Keys.onboardingDone] ?: d.onboardingDone,
             autoInstallUpdates = this[Keys.autoInstallUpdates] ?: d.autoInstallUpdates,
             lastUpdateCheck = this[Keys.lastUpdateCheck] ?: d.lastUpdateCheck,
@@ -174,6 +178,7 @@ class SettingsRepository(private val context: Context) {
         if (s.googleAccount != null) this[Keys.googleAccount] = s.googleAccount else remove(Keys.googleAccount)
         this[Keys.saveNewTasksToGoogle] = s.saveNewTasksToGoogle
         this[Keys.lastTasksSync] = s.lastTasksSync
+        this[Keys.blockedGoogleScopes] = s.blockedGoogleScopes
         this[Keys.onboardingDone] = s.onboardingDone
         this[Keys.autoInstallUpdates] = s.autoInstallUpdates
         this[Keys.lastUpdateCheck] = s.lastUpdateCheck

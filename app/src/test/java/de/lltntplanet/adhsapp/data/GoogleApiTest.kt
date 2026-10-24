@@ -120,6 +120,21 @@ class GoogleApiTest {
     }
 
     @Test
+    fun disallowedScopesAreParsedFromError() = runTest {
+        server.enqueue(
+            MockResponse().setResponseCode(403).setBody(
+                """{"error":{"code":403,"message":"Request contains disallowed OAuth scope(s). Disallowed scopes: [https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly]","status":"PERMISSION_DENIED"}}""",
+            ),
+        )
+        try {
+            HealthApi(http, base()).list("daily-resting-heart-rate", "x")
+            fail("Exception erwartet")
+        } catch (e: GoogleApiException) {
+            assertEquals(setOf("https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly"), e.disallowedScopes)
+        }
+    }
+
+    @Test
     fun healthMapperBuildsSnapshot() = runTest {
         server.enqueue(
             MockResponse().setBody(

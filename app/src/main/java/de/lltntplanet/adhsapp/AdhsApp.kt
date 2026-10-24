@@ -59,7 +59,7 @@ class AppContainer(app: Application) {
 
     val auth = GoogleAuth(app, settings)
     private val http = GoogleHttp(GoogleAuthTokenProvider(auth))
-    val health = HealthRepository(HealthApi(http), settings)
+    val health = HealthRepository(HealthApi(http), settings, auth)
     val tasksSync = GoogleTasksSync(GoogleTasksApi(http), db.taskDao(), settings) { requestReschedule() }
 
     val notifier = ReminderNotifier(app)
