@@ -14,7 +14,12 @@ import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.CommonStatusCodes
 import com.google.android.gms.common.api.Scope
 import de.lltntplanet.adhsapp.data.settings.SettingsRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import okhttp3.FormBody
+import okhttp3.OkHttpClient
+import okhttp3.Request
 
 enum class GoogleFeature(val label: String, val scopes: List<String>) {
     HEALTH(
@@ -40,14 +45,24 @@ sealed interface TokenResult {
  * Ein Client-Secret in der App ist nicht nötig: Google erkennt die App am Paketnamen und
  * am SHA-1-Fingerabdruck, die im Android-OAuth-Client der Google Cloud Console hinterlegt sind.
  */
-class GoogleAuth(private val context: Context, private val settings: SettingsRepository) {
+class GoogleAuth(
+    private val context: Context,
+    private val settings: SettingsRepository,
+    private val http: OkHttpClient = OkHttpClient(),
+) {
 
     private val client get() = Identity.getAuthorizationClient(context)
+
+    /** Angefragte Bereiche ohne die, die das Google-Cloud-Projekt nicht freigibt. */
+    suspend fun activeScopes(feature: GoogleFeature): List<String> {
+        val blocked = settings.current().blockedGoogleScopes
+        return feature.scopes.filter { it !in blocked }.ifEmpty { feature.scopes }
+    }
 
     private suspend fun request(feature: GoogleFeature): AuthorizationRequest {
         val account = settings.current().googleAccount
         return AuthorizationRequest.builder()
-            .setRequestedScopes(feature.scopes.map { Scope(it) })
+            .setRequestedScopes(activeScopes(feature).map { Scope(it) })
             .apply { if (account != null) setAccount(Account(account, "com.google")) }
             .build()
     }
@@ -98,13 +113,41 @@ class GoogleAuth(private val context: Context, private val settings: SettingsRep
         }.onFailure { Log.w(TAG, "revokeAccess fehlgeschlagen", it) }
     }
 
-    /** Freigabe bei Google zurückziehen, damit der Zustimmungsbildschirm beim nächsten Verbinden wieder erscheint. */
+    /**
+     * Freigabe vollständig zurückziehen: Token direkt bei Googles OAuth-Server widerrufen (das löscht die
+     * Zustimmung serverseitig), Token-Cache leeren, Play-Services-Freigabe aufheben und das gemerkte Konto
+     * vergessen. Beim nächsten Verbinden erscheint der Google-Zustimmungsbildschirm wieder.
+     */
     suspend fun reset(feature: GoogleFeature) {
-        when (val r = runCatching { client.authorize(request(feature)).await() }.getOrNull()?.let { handle(it) }) {
-            is TokenResult.Token -> invalidate(r.accessToken)
-            else -> Unit
+        val token = (runCatching { client.authorize(request(feature)).await() }.getOrNull()?.let { handle(it) }
+            as? TokenResult.Token)?.accessToken
+        if (token != null) {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    http.newCall(
+                        Request.Builder()
+                            .url("https://oauth2.googleapis.com/revoke")
+                            .post(FormBody.Builder().add("token", token).build())
+                            .build(),
+                    ).execute().use { Log.i(TAG, "Token widerrufen: HTTP ${it.code}") }
+                }.onFailure { Log.w(TAG, "Widerruf fehlgeschlagen", it) }
+            }
+            invalidate(token)
         }
         revoke(feature)
+        settings.update { it.copy(googleAccount = null) }
+    }
+
+    /** Gesperrte Bereiche merken und das aktuelle Token verwerfen, damit die nächste Anmeldung ohne sie läuft. */
+    suspend fun blockScopes(feature: GoogleFeature, scopes: Set<String>) {
+        if (scopes.isEmpty()) return
+        settings.update { it.copy(blockedGoogleScopes = it.blockedGoogleScopes + scopes) }
+        (token(feature) as? TokenResult.Token)?.let { invalidate(it.accessToken) }
+    }
+
+    /** Gesperrte Bereiche wieder versuchen (z. B. nachdem sie im Cloud-Projekt freigegeben wurden). */
+    suspend fun unblockScopes(feature: GoogleFeature) {
+        settings.update { it.copy(blockedGoogleScopes = it.blockedGoogleScopes - feature.scopes.toSet()) }
     }
 
     private fun describe(e: ApiException): String = when {

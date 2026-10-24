@@ -13,7 +13,19 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /** Fehlerantwort einer Google-API. */
-class GoogleApiException(val code: Int, message: String) : IOException(message)
+class GoogleApiException(val code: Int, message: String) : IOException(message) {
+    /** Bereiche, die Google als "disallowed" meldet (DISALLOWED_OAUTH_SCOPES). */
+    val disallowedScopes: Set<String>
+        get() = if (code == 403 && message?.contains("disallowed OAuth scope", ignoreCase = true) == true) {
+            SCOPE.findAll(message.orEmpty()).map { it.value }.toSet()
+        } else {
+            emptySet()
+        }
+
+    companion object {
+        private val SCOPE = Regex("""https://www\.googleapis\.com/auth/[A-Za-z0-9_.]+""")
+    }
+}
 
 /** Für den Zugriff fehlt (noch) die Zustimmung des Nutzers. */
 class NotAuthorizedException(message: String, val needsConsent: Boolean) : IOException(message)
