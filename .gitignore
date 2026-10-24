@@ -11,3 +11,6 @@
 .cxx/
 *.keystore
 *.jks
+
+# Signaturschlüssel nie einchecken – kommt in der CI aus den Secrets
+/app/signing/

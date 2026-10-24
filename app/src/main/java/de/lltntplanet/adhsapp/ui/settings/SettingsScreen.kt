@@ -59,6 +59,7 @@ import de.lltntplanet.adhsapp.ui.components.ColorDot
 import de.lltntplanet.adhsapp.ui.components.TimePickDialog
 import de.lltntplanet.adhsapp.ui.components.appViewModel
 import de.lltntplanet.adhsapp.ui.components.rememberGoogleConnector
+import de.lltntplanet.adhsapp.ui.update.UpdateSettingsSection
 import de.lltntplanet.adhsapp.util.Dates
 import de.lltntplanet.adhsapp.util.Permissions
 import de.lltntplanet.adhsapp.util.TimeFormat
@@ -340,6 +341,8 @@ fun SettingsScreen(onBack: () -> Unit, onOpenSetup: () -> Unit) {
                 Text("Google-Konto: $it", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
             }
 
+            UpdateSettingsSection()
+
             Section("Über")
             Text("ADHS App ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium)
             Text(
@@ -374,7 +377,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenSetup: () -> Unit) {
 private fun <T> Set<T>.toggle(value: T): Set<T> = if (value in this) this - value else this + value
 
 @Composable
-private fun Section(title: String) {
+internal fun Section(title: String) {
     HorizontalDivider(Modifier.padding(top = 20.dp))
     Text(
         title,
@@ -386,12 +389,12 @@ private fun Section(title: String) {
 }
 
 @Composable
-private fun Label(text: String) {
+internal fun Label(text: String) {
     Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
 }
 
 @Composable
-private fun SwitchSetting(
+internal fun SwitchSetting(
     title: String,
     subtitle: String?,
     checked: Boolean,
@@ -415,7 +418,7 @@ private fun SwitchSetting(
 }
 
 @Composable
-private fun ClickSetting(title: String, value: String, onClick: () -> Unit) {
+internal fun ClickSetting(title: String, value: String, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,

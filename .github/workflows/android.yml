@@ -1,8 +1,7 @@
 name: Android
 
+# Prüft Pull Requests. Veröffentlicht wird von release.yml nach dem Merge auf main.
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
