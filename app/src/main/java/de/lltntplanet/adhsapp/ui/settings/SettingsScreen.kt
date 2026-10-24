@@ -117,9 +117,17 @@ class SettingsViewModel(private val c: AppContainer) : ViewModel() {
         }
     }
 
+    /** Freigabe kappen und sofort neu verbinden – Google zeigt dann den Zustimmungsbildschirm erneut. */
+    fun reconnect(feature: GoogleFeature, connect: (GoogleFeature) -> Unit) {
+        viewModelScope.launch {
+            c.auth.reset(feature)
+            connect(feature)
+        }
+    }
+
     fun disconnect(feature: GoogleFeature) {
         viewModelScope.launch {
-            c.auth.revoke(feature)
+            c.auth.reset(feature)
             c.settings.update {
                 when (feature) {
                     GoogleFeature.HEALTH -> it.copy(healthConnected = false)
@@ -274,6 +282,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenSetup: () -> Unit) {
                 title = "Google Tasks",
                 connected = s.tasksConnected,
                 onConnect = { connect(GoogleFeature.TASKS) },
+                onReconnect = { vm.reconnect(GoogleFeature.TASKS, connect) },
                 onDisconnect = { vm.disconnect(GoogleFeature.TASKS) },
             )
             if (s.tasksConnected) {
@@ -325,6 +334,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenSetup: () -> Unit) {
                 title = "Google Health",
                 connected = s.healthConnected,
                 onConnect = { connect(GoogleFeature.HEALTH) },
+                onReconnect = { vm.reconnect(GoogleFeature.HEALTH, connect) },
                 onDisconnect = { vm.disconnect(GoogleFeature.HEALTH) },
             )
             Label("Tagesziel Schritte")
@@ -429,7 +439,7 @@ internal fun ClickSetting(title: String, value: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun GoogleRow(title: String, connected: Boolean, onConnect: () -> Unit, onDisconnect: () -> Unit) {
+private fun GoogleRow(title: String, connected: Boolean, onConnect: () -> Unit, onReconnect: () -> Unit, onDisconnect: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
@@ -439,7 +449,11 @@ private fun GoogleRow(title: String, connected: Boolean, onConnect: () -> Unit, 
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        if (connected) TextButton(onClick = onDisconnect) { Text("Trennen") }
-        else Button(onClick = onConnect) { Text("Verbinden") }
+        if (connected) {
+            TextButton(onClick = onReconnect) { Text("Neu verbinden") }
+            TextButton(onClick = onDisconnect) { Text("Trennen") }
+        } else {
+            Button(onClick = onConnect) { Text("Verbinden") }
+        }
     }
 }
