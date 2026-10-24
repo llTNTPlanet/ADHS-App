@@ -98,7 +98,12 @@ class GoogleAuth(private val context: Context, private val settings: SettingsRep
         }.onFailure { Log.w(TAG, "revokeAccess fehlgeschlagen", it) }
     }
 
-    private fun describe(e: ApiException): String = when (e.statusCode) {
+    private fun describe(e: ApiException): String = when {
+        e.statusCode == CommonStatusCodes.INTERNAL_ERROR || e.message?.contains("UNREGISTERED_ON_API_CONSOLE") == true ->
+            "Google kennt diese App noch nicht. Einmalig in der Google Cloud Console einen Android-OAuth-Client anlegen " +
+                "(Paketname de.lltntplanet.adhsapp + SHA-1 der installierten Version) und die passende API aktivieren – " +
+                "Anleitung in der README unter „Google Health und Google Tasks verbinden“."
+        else -> when (e.statusCode) {
         CommonStatusCodes.DEVELOPER_ERROR ->
             "Google-Anmeldung ist noch nicht eingerichtet (Fehler 10). Prüfe in der Google Cloud Console den " +
                 "Android-OAuth-Client: Paketname de.lltntplanet.adhsapp und SHA-1-Fingerabdruck deiner App."
@@ -106,6 +111,7 @@ class GoogleAuth(private val context: Context, private val settings: SettingsRep
         CommonStatusCodes.CANCELED, 16 -> "Anmeldung abgebrochen."
         CommonStatusCodes.SIGN_IN_REQUIRED -> "Bitte mit Google anmelden."
         else -> "Google-Fehler ${e.statusCode}: ${e.message}"
+        }
     }
 
     companion object {
