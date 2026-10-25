@@ -48,7 +48,11 @@ fun FoodVisionSettings(settings: AppSettings, update: ((AppSettings) -> AppSetti
     val claudeKey by container.secrets.anthropicApiKey.collectAsStateWithLifecycle()
     var input by remember(settings.foodVisionProvider) { mutableStateOf("") }
     val provider = settings.foodVisionProvider
-    val saved = if (provider == FoodVisionProvider.GEMINI) geminiKey else claudeKey
+    val saved = when (provider) {
+        FoodVisionProvider.CHAT -> null
+        FoodVisionProvider.GEMINI -> geminiKey
+        FoodVisionProvider.CLAUDE -> claudeKey
+    }
 
     Label("Foto-Erkennung von Mahlzeiten")
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -62,6 +66,10 @@ fun FoodVisionSettings(settings: AppSettings, update: ((AppSettings) -> AppSetti
     }
     Text(
         when (provider) {
+            FoodVisionProvider.CHAT ->
+                "Ohne Schlüssel und ohne Kosten: Das Foto geht mit einer fertigen Frage über „Teilen“ an eine Chat-App deiner Wahl " +
+                    "(Gemini, ChatGPT, Claude, Copilot …). Die Antwort fügst du in der App ein oder teilst sie aus dem Chat zurück " +
+                    "an „Kalorien eintragen (ADHS App)“."
             FoodVisionProvider.GEMINI ->
                 if (saved != null) "Gemini-Schlüssel ist gespeichert – die Erkennung ist kostenlos (Gratis-Kontingent von Google AI Studio)."
                 else "Kostenlos: Einmalig einen Gemini-API-Schlüssel in Google AI Studio erstellen (Google-Konto genügt, keine Zahlungsdaten)."
@@ -72,6 +80,7 @@ fun FoodVisionSettings(settings: AppSettings, update: ((AppSettings) -> AppSetti
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    if (!provider.needsKey) return
     OutlinedTextField(
         value = input,
         onValueChange = { input = it },
@@ -89,6 +98,7 @@ fun FoodVisionSettings(settings: AppSettings, update: ((AppSettings) -> AppSetti
             enabled = input.isNotBlank(),
             onClick = {
                 when (provider) {
+                    FoodVisionProvider.CHAT -> Unit
                     FoodVisionProvider.GEMINI -> container.secrets.setGeminiApiKey(input)
                     FoodVisionProvider.CLAUDE -> container.secrets.setAnthropicApiKey(input)
                 }
@@ -99,6 +109,7 @@ fun FoodVisionSettings(settings: AppSettings, update: ((AppSettings) -> AppSetti
             TextButton(
                 onClick = {
                     when (provider) {
+                        FoodVisionProvider.CHAT -> Unit
                         FoodVisionProvider.GEMINI -> container.secrets.setGeminiApiKey(null)
                         FoodVisionProvider.CLAUDE -> container.secrets.setAnthropicApiKey(null)
                     }

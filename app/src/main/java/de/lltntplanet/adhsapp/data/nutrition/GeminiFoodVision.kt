@@ -162,20 +162,31 @@ class GeminiFoodVisionClient(
     }
 }
 
-/** Wählt den eingestellten Erkenner (Gemini kostenlos oder Claude). */
+/** Wählt den eingestellten Erkenner (Gemini kostenlos oder Claude). Der Chat-Weg läuft ohne Erkenner über das Teilen-Menü. */
 class FoodVisionRouter(
     private val provider: () -> FoodVisionProvider,
     private val gemini: FoodRecognizer,
     private val claude: FoodRecognizer,
 ) : FoodRecognizer {
-    private val active: FoodRecognizer get() = if (provider() == FoodVisionProvider.CLAUDE) claude else gemini
+    private val active: FoodRecognizer? get() = when (provider()) {
+        FoodVisionProvider.CHAT -> null
+        FoodVisionProvider.GEMINI -> gemini
+        FoodVisionProvider.CLAUDE -> claude
+    }
 
-    override val configured: Boolean get() = active.configured
+    /** Der Chat-Weg braucht keinen Schlüssel und gilt immer als eingerichtet. */
+    override val configured: Boolean get() = active?.configured ?: true
 
-    override suspend fun analyze(jpeg: ByteArray, hint: String?): FoodRecognition = active.analyze(jpeg, hint)
+    override suspend fun analyze(jpeg: ByteArray, hint: String?): FoodRecognition =
+        (active ?: throw FoodVisionException(0, "Beim Chat-Weg wird das Foto geteilt und die Antwort eingefügt."))
+            .analyze(jpeg, hint)
 }
 
 enum class FoodVisionProvider(val label: String, val keyUrl: String, val keyPlaceholder: String) {
-    GEMINI("Gemini (kostenlos)", "https://aistudio.google.com/apikey", "AIza…"),
-    CLAUDE("Claude (Anthropic)", "https://platform.claude.com/settings/keys", "sk-ant-…"),
+    /** Foto an eine beliebige Chat-App teilen, Antwort einfügen – kostenlos, ohne Schlüssel. */
+    CHAT("Chat-App (kostenlos, ohne Schlüssel)", "", ""),
+    GEMINI("Gemini-API (kostenlos, mit Schlüssel)", "https://aistudio.google.com/apikey", "AIza…"),
+    CLAUDE("Claude-API (Anthropic)", "https://platform.claude.com/settings/keys", "sk-ant-…");
+
+    val needsKey: Boolean get() = keyUrl.isNotEmpty()
 }

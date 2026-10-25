@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">ADHS App</string>
+    <string name="share_chat_answer">Kalorien eintragen (ADHS App)</string>
     <string name="channel_reminders_name">Vollbild-Erinnerungen</string>
     <string name="channel_reminders_description">Termine, Geburtstage und Aufgaben – werden über den ganzen Bildschirm angezeigt.</string>
     <string name="channel_info_name">Hinweise</string>

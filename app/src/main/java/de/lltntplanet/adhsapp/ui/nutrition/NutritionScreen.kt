@@ -1,5 +1,7 @@
 package de.lltntplanet.adhsapp.ui.nutrition
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -29,6 +31,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Cookie
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DinnerDining
@@ -89,6 +93,7 @@ import de.lltntplanet.adhsapp.AppContainer
 import de.lltntplanet.adhsapp.data.db.FoodEntryEntity
 import de.lltntplanet.adhsapp.data.db.MealType
 import de.lltntplanet.adhsapp.data.nutrition.CalorieBalance
+import de.lltntplanet.adhsapp.data.nutrition.ChatFoodEstimate
 import de.lltntplanet.adhsapp.data.nutrition.FoodRecognition
 import de.lltntplanet.adhsapp.data.nutrition.FoodVisionProvider
 import de.lltntplanet.adhsapp.data.nutrition.PhotoScaler
@@ -109,9 +114,11 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.NumberFormat
 import java.time.LocalDate
 import java.time.LocalTime
@@ -180,8 +187,13 @@ class NutritionViewModel(private val c: AppContainer) : ViewModel() {
         settings.map { it.foodVisionProvider },
         c.secrets.geminiApiKey,
         c.secrets.anthropicApiKey,
-    ) { p, gemini, claude -> !(if (p == FoodVisionProvider.CLAUDE) claude else gemini).isNullOrBlank() }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, c.foodVision.configured)
+    ) { p, gemini, claude ->
+        when (p) {
+            FoodVisionProvider.CHAT -> true
+            FoodVisionProvider.GEMINI -> !gemini.isNullOrBlank()
+            FoodVisionProvider.CLAUDE -> !claude.isNullOrBlank()
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, c.foodVision.configured)
 
     private val _analysis = MutableStateFlow<PhotoAnalysis>(PhotoAnalysis.Idle)
     val analysis: StateFlow<PhotoAnalysis> = _analysis.asStateFlow()
@@ -189,14 +201,35 @@ class NutritionViewModel(private val c: AppContainer) : ViewModel() {
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val messages: SharedFlow<String> = _messages
 
+    /** Foto + Frage, die an eine Chat-App geteilt werden sollen (Chat-Weg ohne Schlüssel). */
+    private val _shareRequests = MutableSharedFlow<ChatShareRequest>(extraBufferCapacity = 1)
+    val shareRequests: SharedFlow<ChatShareRequest> = _shareRequests
+
+    init {
+        // Antwort, die per „Teilen“ aus einer Chat-App ankam, sofort auswerten.
+        viewModelScope.launch {
+            c.sharedChatAnswer.collect { text ->
+                if (text != null) {
+                    c.sharedChatAnswer.value = null
+                    parseChatAnswer(text)
+                }
+            }
+        }
+    }
+
     fun setApiKey(provider: FoodVisionProvider, key: String) = when (provider) {
+        FoodVisionProvider.CHAT -> Unit
         FoodVisionProvider.GEMINI -> c.secrets.setGeminiApiKey(key)
         FoodVisionProvider.CLAUDE -> c.secrets.setAnthropicApiKey(key)
     }
 
-    /** Foto verkleinern, an die Erkennung schicken und das Ergebnis zur Prüfung anzeigen. */
+    /** Foto verkleinern und – je nach Einstellung – an die API schicken oder zum Teilen an eine Chat-App vorbereiten. */
     fun analyzePhoto(uri: Uri, deleteAfter: Boolean) {
         if (_analysis.value is PhotoAnalysis.Running) return
+        if (visionProvider.value == FoodVisionProvider.CHAT) {
+            preparePhotoForChat(uri, deleteAfter)
+            return
+        }
         _analysis.value = PhotoAnalysis.Running
         viewModelScope.launch {
             val result = runCatching {
@@ -211,8 +244,70 @@ class NutritionViewModel(private val c: AppContainer) : ViewModel() {
         }
     }
 
+    /**
+     * Chat-Weg: verkleinerte Kopie des Fotos im Cache ablegen, Teilen anstoßen und auf die eingefügte Antwort warten.
+     * Das Original aus der Kamera wird gelöscht, die Kopie beim Schließen des Einfüge-Dialogs.
+     */
+    private fun preparePhotoForChat(uri: Uri, deleteAfter: Boolean) {
+        _analysis.value = PhotoAnalysis.Running
+        viewModelScope.launch {
+            val result = runCatching {
+                val jpeg = PhotoScaler.toJpeg(c.app.contentResolver, uri)
+                val dir = File(c.app.cacheDir, "photos").apply { mkdirs() }
+                dir.listFiles { f -> f.name.startsWith("chat-") }?.forEach { it.delete() }
+                val file = File(dir, "chat-${System.currentTimeMillis()}.jpg")
+                withContext(Dispatchers.IO) { file.writeBytes(jpeg) }
+                FileProvider.getUriForFile(c.app, "${c.app.packageName}.fileprovider", file)
+            }
+            if (deleteAfter) runCatching { c.app.contentResolver.delete(uri, null, null) }
+            result.fold(
+                onSuccess = { shareUri ->
+                    _analysis.value = PhotoAnalysis.AwaitingChat(shareUri)
+                    _shareRequests.tryEmit(ChatShareRequest(shareUri, ChatFoodEstimate.PROMPT))
+                },
+                onFailure = { _analysis.value = PhotoAnalysis.Failed(it.message ?: "Foto konnte nicht vorbereitet werden") },
+            )
+        }
+    }
+
+    /** Das zuletzt vorbereitete Foto noch einmal an eine Chat-App teilen. */
+    fun shareAgain() {
+        val photo = (_analysis.value as? PhotoAnalysis.AwaitingChat)?.photo ?: return
+        _shareRequests.tryEmit(ChatShareRequest(photo, ChatFoodEstimate.PROMPT))
+    }
+
+    /** Einfüge-Dialog öffnen – ohne Foto (z. B. nach einem Neustart der App) oder nach einer nicht verstandenen Antwort. */
+    fun openChatPaste() {
+        when (val a = _analysis.value) {
+            is PhotoAnalysis.Running, is PhotoAnalysis.AwaitingChat -> Unit
+            is PhotoAnalysis.Failed -> _analysis.value = PhotoAnalysis.AwaitingChat(a.photo)
+            else -> _analysis.value = PhotoAnalysis.AwaitingChat(null)
+        }
+    }
+
+    /** Antwort aus der Chat-App auswerten und zur Prüfung anzeigen. Das geteilte Foto bleibt bis zum Erfolg zum erneuten Teilen. */
+    fun parseChatAnswer(text: String) {
+        val photo = chatPhoto()
+        _analysis.value = runCatching { ChatFoodEstimate.parseAnswer(text) }.fold(
+            onSuccess = { deleteChatPhoto(); PhotoAnalysis.Done(it) },
+            onFailure = { PhotoAnalysis.Failed(it.message ?: "Antwort nicht verstanden", retryChat = true, photo = photo) },
+        )
+    }
+
     fun dismissAnalysis() {
+        deleteChatPhoto()
         _analysis.value = PhotoAnalysis.Idle
+    }
+
+    private fun chatPhoto(): Uri? = when (val a = _analysis.value) {
+        is PhotoAnalysis.AwaitingChat -> a.photo
+        is PhotoAnalysis.Failed -> a.photo
+        else -> null
+    }
+
+    private fun deleteChatPhoto() {
+        val photo = chatPhoto() ?: return
+        runCatching { c.app.contentResolver.delete(photo, null, null) }
     }
 
     /** Erkannte Lebensmittel als einzelne Einträge speichern. */
@@ -284,6 +379,24 @@ fun NutritionScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val today = LocalDate.now()
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
+    LaunchedEffect(Unit) {
+        vm.shareRequests.collect { request ->
+            // Frage zusätzlich in die Zwischenablage – manche Chat-Apps übernehmen beim Teilen nur das Bild.
+            runCatching {
+                context.getSystemService(ClipboardManager::class.java)
+                    ?.setPrimaryClip(ClipData.newPlainText("Kalorien-Frage", request.prompt))
+            }
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = "image/jpeg"
+                putExtra(Intent.EXTRA_STREAM, request.photo)
+                putExtra(Intent.EXTRA_TEXT, request.prompt)
+                clipData = ClipData.newUri(context.contentResolver, "Essen", request.photo)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            runCatching { context.startActivity(Intent.createChooser(send, "Foto an Chat-App schicken")) }
+                .onFailure { snackbar.showSnackbar("Keine App zum Teilen gefunden") }
+        }
+    }
 
     // Kamera: Foto landet im Cache der App und wird nach der Erkennung gelöscht.
     var cameraUri by remember { mutableStateOf<Uri?>(null) }
@@ -418,12 +531,14 @@ fun NutritionScreen(modifier: Modifier = Modifier) {
     }
     if (showPhotoSource) {
         PhotoSourceDialog(
+            chat = visionProvider == FoodVisionProvider.CHAT,
             onDismiss = { showPhotoSource = false },
             onCamera = { showPhotoSource = false; startCamera() },
             onGallery = {
                 showPhotoSource = false
                 pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
             },
+            onPasteAnswer = { showPhotoSource = false; vm.openChatPaste() },
         )
     }
     if (showApiKey) {
@@ -444,14 +559,26 @@ fun NutritionScreen(modifier: Modifier = Modifier) {
             onDismiss = vm::dismissAnalysis,
             onSave = vm::saveRecognized,
         )
+        is PhotoAnalysis.AwaitingChat -> ChatAnswerDialog(
+            hasPhoto = a.photo != null,
+            onDismiss = vm::dismissAnalysis,
+            onShareAgain = vm::shareAgain,
+            onAnalyze = vm::parseChatAnswer,
+        )
         is PhotoAnalysis.Failed -> AlertDialog(
             onDismissRequest = vm::dismissAnalysis,
-            title = { Text("Erkennung fehlgeschlagen") },
+            title = { Text(if (a.retryChat) "Antwort nicht verstanden" else "Erkennung fehlgeschlagen") },
             text = { Text(a.message) },
             confirmButton = { TextButton(onClick = vm::dismissAnalysis) { Text("OK") } },
-            dismissButton = if (!visionConfigured || a.message.contains("Schlüssel")) {
-                { TextButton(onClick = { vm.dismissAnalysis(); showApiKey = true }) { Text("Schlüssel eintragen") } }
-            } else null,
+            dismissButton = when {
+                a.retryChat -> {
+                    { TextButton(onClick = { vm.openChatPaste() }) { Text("Noch einmal einfügen") } }
+                }
+                !visionConfigured || a.message.contains("Schlüssel") -> {
+                    { TextButton(onClick = { vm.dismissAnalysis(); showApiKey = true }) { Text("Schlüssel eintragen") } }
+                }
+                else -> null
+            },
         )
         else -> Unit
     }
@@ -846,20 +973,44 @@ sealed interface PhotoAnalysis {
     data object Idle : PhotoAnalysis
     data object Running : PhotoAnalysis
     data class Done(val result: FoodRecognition) : PhotoAnalysis
-    data class Failed(val message: String) : PhotoAnalysis
+    /** Chat-Weg: Foto wurde geteilt (oder der Dialog manuell geöffnet), die Antwort fehlt noch. */
+    data class AwaitingChat(val photo: Uri?) : PhotoAnalysis
+    data class Failed(val message: String, val retryChat: Boolean = false, val photo: Uri? = null) : PhotoAnalysis
 }
+
+/** Foto und Frage für das Teilen-Menü. */
+data class ChatShareRequest(val photo: Uri, val prompt: String)
 
 /** Dialog: Foto aufnehmen oder aus der Galerie wählen. */
 @Composable
-private fun PhotoSourceDialog(onDismiss: () -> Unit, onCamera: () -> Unit, onGallery: () -> Unit) {
+private fun PhotoSourceDialog(
+    chat: Boolean,
+    onDismiss: () -> Unit,
+    onCamera: () -> Unit,
+    onGallery: () -> Unit,
+    onPasteAnswer: () -> Unit,
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Essen fotografieren") },
         text = {
-            Text(
-                "Fotografiere deinen Teller oder die Verpackung (gern die Nährwerttabelle). " +
-                    "Die App erkennt die Lebensmittel und schätzt die Kalorien – du kannst alles vor dem Eintragen anpassen.",
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    if (chat) {
+                        "Fotografiere deinen Teller oder die Verpackung (gern die Nährwerttabelle). Das Foto geht mit einer fertigen " +
+                            "Frage an eine Chat-App deiner Wahl (Gemini, ChatGPT, Claude …). Deren Antwort kopierst du und fügst sie hier ein – " +
+                            "oder du teilst sie aus dem Chat direkt an die ADHS App."
+                    } else {
+                        "Fotografiere deinen Teller oder die Verpackung (gern die Nährwerttabelle). " +
+                            "Die App erkennt die Lebensmittel und schätzt die Kalorien – du kannst alles vor dem Eintragen anpassen."
+                    },
+                )
+                if (chat) {
+                    TextButton(onClick = onPasteAnswer) {
+                        Icon(Icons.Filled.ContentPaste, null); Spacer(Modifier.width(6.dp)); Text("Antwort aus dem Chat einfügen")
+                    }
+                }
+            }
         },
         confirmButton = { TextButton(onClick = onCamera) { Icon(Icons.Filled.PhotoCamera, null); Spacer(Modifier.width(6.dp)); Text("Kamera") } },
         dismissButton = { TextButton(onClick = onGallery) { Icon(Icons.Filled.PhotoLibrary, null); Spacer(Modifier.width(6.dp)); Text("Galerie") } },
@@ -958,6 +1109,59 @@ private fun RecognitionDialog(
     )
 }
 
+/** Chat-Weg: Antwort der Chat-App einfügen und auswerten lassen. */
+@Composable
+private fun ChatAnswerDialog(hasPhoto: Boolean, onDismiss: () -> Unit, onShareAgain: () -> Unit, onAnalyze: (String) -> Unit) {
+    val context = LocalContext.current
+    var answer by remember { mutableStateOf("") }
+    fun pasteFromClipboard() {
+        val clip = runCatching { context.getSystemService(ClipboardManager::class.java)?.primaryClip }.getOrNull()
+        val text = clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
+        if (text.isNotBlank() && !text.startsWith(ChatFoodEstimate.PROMPT.take(40))) answer = text
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Antwort aus dem Chat") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    if (hasPhoto) {
+                        "Schick das Foto an deine Chat-App ab (die Frage steckt mit drin und liegt zusätzlich in der Zwischenablage). " +
+                            "Kopiere dann die Antwort und füge sie hier ein."
+                    } else {
+                        "Füge hier die Antwort ein, die dir die Chat-App zu deinem Foto gegeben hat."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedTextField(
+                    value = answer,
+                    onValueChange = { answer = it },
+                    placeholder = { Text("{\"items\": [ … ]}  oder  „Reis, 200 g, 260 kcal“") },
+                    minLines = 4,
+                    maxLines = 10,
+                    textStyle = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(onClick = { pasteFromClipboard() }) {
+                        Icon(Icons.Filled.ContentPaste, null); Spacer(Modifier.width(6.dp)); Text("Aus Zwischenablage")
+                    }
+                    if (hasPhoto) {
+                        TextButton(onClick = onShareAgain) { Icon(Icons.Filled.Share, null); Spacer(Modifier.width(6.dp)); Text("Noch einmal teilen") }
+                    }
+                }
+                Text(
+                    "Tipp: Im Chat die Antwort „Teilen“ → „Kalorien eintragen (ADHS App)“ spart das Kopieren.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = { TextButton(enabled = answer.isNotBlank(), onClick = { onAnalyze(answer) }) { Text("Auswerten") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } },
+    )
+}
+
 /** Einmalig den API-Schlüssel für die Foto-Erkennung eintragen. */
 @Composable
 fun ApiKeyDialog(provider: FoodVisionProvider, onDismiss: () -> Unit, onSave: (String) -> Unit) {
@@ -970,6 +1174,7 @@ fun ApiKeyDialog(provider: FoodVisionProvider, onDismiss: () -> Unit, onSave: (S
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     when (provider) {
+                        FoodVisionProvider.CHAT -> "Der Chat-Weg braucht keinen Schlüssel."
                         FoodVisionProvider.GEMINI ->
                             "Die Erkennung läuft kostenlos über die Gemini-API von Google. Du brauchst einmalig einen eigenen " +
                                 "API-Schlüssel aus Google AI Studio – ein Google-Konto genügt, Zahlungsdaten sind nicht nötig."

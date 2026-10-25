@@ -99,6 +99,8 @@ class AppContainer(val app: Application) {
         gemini = GeminiFoodVisionClient({ secrets.geminiApiKey.value }),
         claude = FoodVisionClient({ secrets.anthropicApiKey.value }),
     )
+    /** Text, der per „Teilen“ aus einer Chat-App an die App geschickt wurde (Kalorien-Antwort); die Seite „Essen“ holt ihn ab. */
+    val sharedChatAnswer = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
     val updates = UpdateManager(app, settings, secrets, GitHubReleaseClient(), ApkInstaller(app), updateNotifier, scope)
 
     private var rescheduleJob: Job? = null

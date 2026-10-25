@@ -23,6 +23,7 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) {
             requestedTab = tabFrom(intent)
             showUpdateIfRequested(intent)
+            takeSharedText(intent)
         }
         setContent {
             AdhsTheme {
@@ -35,6 +36,15 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         tabFrom(intent)?.let { requestedTab = it }
         showUpdateIfRequested(intent)
+        takeSharedText(intent)
+    }
+
+    /** Antwort einer Chat-App, die per „Teilen“ an die App geschickt wurde → Seite „Essen“ wertet sie aus. */
+    private fun takeSharedText(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_SEND || intent.type?.startsWith("text/") != true) return
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.takeIf { it.isNotBlank() } ?: return
+        (application as AdhsApp).container.sharedChatAnswer.value = text
+        requestedTab = Tab.NUTRITION
     }
 
     private fun showUpdateIfRequested(intent: Intent?) {

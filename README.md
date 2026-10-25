@@ -58,11 +58,18 @@ Weitere Bilder: [Essen](docs/screenshots/10-ernaehrung.png), [Monat](docs/screen
   Defizit (z. B. −300 kcal zum Abnehmen)
 - Mahlzeiten Morgens / Mittags / Abends / Zwischendurch mit Einträgen (Name, kcal, Menge); Vorschläge aus den
   letzten Einträgen; Pfeile zum Blättern durch die Tage wie in Google Health
-- **Foto-Erkennung:** Teller oder Verpackung fotografieren (Kamera oder Galerie) – die App erkennt die Lebensmittel,
-  liest Nährwerttabellen und schätzt die Kalorien; alles lässt sich vor dem Eintragen prüfen und anpassen.
-  Standard ist die **kostenlose** Gemini-API (einmalig einen Schlüssel in Google AI Studio erstellen, Google-Konto genügt);
-  alternativ Claude (Anthropic-Schlüssel mit Guthaben, ca. ein Cent pro Foto). Fotos werden nur für die Erkennung
-  übertragen und nicht gespeichert
+- **Foto-Erkennung:** Teller oder Verpackung fotografieren (Kamera oder Galerie) – die Lebensmittel werden erkannt,
+  Nährwerttabellen gelesen und die Kalorien geschätzt; alles lässt sich vor dem Eintragen prüfen und anpassen.
+  Drei Wege (Einstellungen → Ernährung):
+  - **Chat-App (kostenlos, ohne Schlüssel):** Das Foto geht mit einer fertigen Frage über „Teilen“ an eine beliebige
+    Chat-App (Gemini, ChatGPT, Claude, Copilot …). Die Antwort kopierst du und fügst sie in der App ein („Aus Zwischenablage“),
+    oder du teilst sie aus dem Chat direkt an **„Kalorien eintragen (ADHS App)“** – die App liest das Ergebnis (JSON oder
+    Zeilen wie „Reis, 200 g, 260 kcal“) und zeigt es zur Prüfung an
+  - **Gemini-API (kostenlos, mit Schlüssel):** einmalig einen Schlüssel in Google AI Studio erstellen (Google-Konto genügt),
+    danach läuft die Erkennung direkt in der App
+  - **Claude-API:** Anthropic-Schlüssel mit Guthaben, ca. ein Cent pro Foto
+
+  Fotos werden nur für die Erkennung übertragen und nicht gespeichert
 - **Google Health:** Mahlzeiten lassen sich kostenlos an **Health Connect** übergeben (Einstellungen → Ernährung);
   die Google-Health-App übernimmt sie von dort. Das Foto selbst kann nicht an Google Health geschickt werden – Health
   Connect speichert nur Daten, erkennt aber nichts
@@ -196,7 +203,8 @@ Der GitHub-Token für Updates liegt im privaten App-Speicher und ist von Geräte
 - Kotlin, Jetpack Compose (Material 3), Room, DataStore, WorkManager
 - Google Kalender über den Kalender-Speicher von Android (`CalendarContract`) – offline-fähig, keine Cloud-Freigabe nötig
 - Google Health API v4 (`health.googleapis.com`) und Google Tasks API über `AuthorizationClient` (Google Identity Services) und OkHttp
-- Foto-Erkennung von Mahlzeiten wahlweise über die Gemini API (`generativelanguage.googleapis.com`, `gemini-2.5-flash`,
+- Foto-Erkennung von Mahlzeiten wahlweise über das Teilen-Menü an eine Chat-App (`ACTION_SEND` mit Bild + Frage,
+  Antwort zurück per Zwischenablage oder `ACTION_SEND text/plain` an die App, toleranter JSON-/Zeilen-Parser), über die Gemini API (`generativelanguage.googleapis.com`, `gemini-2.5-flash`,
   Gratis-Kontingent, `inline_data` + `responseSchema`) oder die Claude Messages API (`api.anthropic.com`, `claude-opus-5-5`,
   strukturierte JSON-Ausgabe, Server-Fallback bei Ablehnung); Foto wird vorher auf 1280 px verkleinert
 - Health Connect (`androidx.health.connect:connect-client`): `NutritionRecord` je Mahlzeit mit fester Client-Kennung,
