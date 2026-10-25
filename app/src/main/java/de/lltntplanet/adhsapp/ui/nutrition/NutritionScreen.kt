@@ -1,5 +1,10 @@
 package de.lltntplanet.adhsapp.ui.nutrition
 
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -30,14 +35,21 @@ import androidx.compose.material.icons.filled.DinnerDining
 import androidx.compose.material.icons.filled.FreeBreakfast
 import androidx.compose.material.icons.filled.LunchDining
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -61,11 +73,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
@@ -73,6 +89,9 @@ import de.lltntplanet.adhsapp.AppContainer
 import de.lltntplanet.adhsapp.data.db.FoodEntryEntity
 import de.lltntplanet.adhsapp.data.db.MealType
 import de.lltntplanet.adhsapp.data.nutrition.CalorieBalance
+import de.lltntplanet.adhsapp.data.nutrition.FoodRecognition
+import de.lltntplanet.adhsapp.data.nutrition.PhotoScaler
+import de.lltntplanet.adhsapp.data.nutrition.RecognizedFood
 import de.lltntplanet.adhsapp.data.nutrition.NutritionMath
 import de.lltntplanet.adhsapp.data.settings.AppSettings
 import de.lltntplanet.adhsapp.data.settings.Sex
@@ -88,10 +107,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.time.LocalDate
 import java.time.LocalTime
+import java.io.File
 
 /** Alles, was die Seite für einen Tag braucht. */
 data class NutritionDay(
@@ -149,6 +171,52 @@ class NutritionViewModel(private val c: AppContainer) : ViewModel() {
         viewModelScope.launch { c.nutrition.delete(entry) }
     }
 
+    val visionConfigured: StateFlow<Boolean> = c.secrets.anthropicApiKey
+        .combine(MutableStateFlow(Unit)) { k, _ -> !k.isNullOrBlank() }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, c.foodVision.configured)
+
+    private val _analysis = MutableStateFlow<PhotoAnalysis>(PhotoAnalysis.Idle)
+    val analysis: StateFlow<PhotoAnalysis> = _analysis.asStateFlow()
+
+    private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val messages: SharedFlow<String> = _messages
+
+    fun setApiKey(key: String) = c.secrets.setAnthropicApiKey(key)
+
+    /** Foto verkleinern, an die Erkennung schicken und das Ergebnis zur Prüfung anzeigen. */
+    fun analyzePhoto(uri: Uri, deleteAfter: Boolean) {
+        if (_analysis.value is PhotoAnalysis.Running) return
+        _analysis.value = PhotoAnalysis.Running
+        viewModelScope.launch {
+            val result = runCatching {
+                val jpeg = PhotoScaler.toJpeg(c.app.contentResolver, uri)
+                c.foodVision.analyze(jpeg)
+            }
+            if (deleteAfter) runCatching { c.app.contentResolver.delete(uri, null, null) }
+            _analysis.value = result.fold(
+                onSuccess = { PhotoAnalysis.Done(it) },
+                onFailure = { PhotoAnalysis.Failed(it.message ?: "Erkennung fehlgeschlagen") },
+            )
+        }
+    }
+
+    fun dismissAnalysis() {
+        _analysis.value = PhotoAnalysis.Idle
+    }
+
+    /** Erkannte Lebensmittel als einzelne Einträge speichern. */
+    fun saveRecognized(items: List<RecognizedFood>, meal: MealType) {
+        val epochDay = _date.value.toEpochDay()
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            items.forEachIndexed { i, item ->
+                c.nutrition.save(FoodEntryEntity(epochDay = epochDay, meal = meal, name = item.name.trim(), kcal = item.kcal, amount = item.amount.trim(), createdAt = now + i))
+            }
+            _messages.tryEmit("${items.size} ${if (items.size == 1) "Eintrag" else "Einträge"} aus dem Foto eingetragen")
+        }
+        _analysis.value = PhotoAnalysis.Idle
+    }
+
     fun saveProfile(sex: Sex?, birthYear: Int?, heightCm: Int?, weightKg: Double?, adjustment: Int) {
         viewModelScope.launch {
             c.settings.update {
@@ -196,10 +264,39 @@ fun NutritionScreen(modifier: Modifier = Modifier) {
     var adding by remember { mutableStateOf<MealType?>(null) }
     var editing by remember { mutableStateOf<FoodEntryEntity?>(null) }
     var showProfile by remember { mutableStateOf(false) }
+    var showPhotoSource by remember { mutableStateOf(false) }
+    var showApiKey by remember { mutableStateOf(false) }
+    val visionConfigured by vm.visionConfigured.collectAsStateWithLifecycle()
+    val analysis by vm.analysis.collectAsStateWithLifecycle()
+    val snackbar = remember { SnackbarHostState() }
+    val context = LocalContext.current
     val today = LocalDate.now()
+    LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
+
+    // Kamera: Foto landet im Cache der App und wird nach der Erkennung gelöscht.
+    var cameraUri by remember { mutableStateOf<Uri?>(null) }
+    val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        val uri = cameraUri
+        if (ok && uri != null) vm.analyzePhoto(uri, deleteAfter = true) else uri?.let { runCatching { context.contentResolver.delete(it, null, null) } }
+        cameraUri = null
+    }
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) vm.analyzePhoto(uri, deleteAfter = false)
+    }
+    fun startCamera() {
+        val dir = File(context.cacheDir, "photos").apply { mkdirs() }
+        val file = File(dir, "essen-${System.currentTimeMillis()}.jpg")
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        cameraUri = uri
+        runCatching { takePicture.launch(uri) }.onFailure { cameraUri = null }
+    }
+    fun startPhoto() {
+        if (visionConfigured) showPhotoSource = true else showApiKey = true
+    }
 
     Scaffold(
         modifier = modifier,
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = { Text("Ernährung") },
@@ -209,10 +306,23 @@ fun NutritionScreen(modifier: Modifier = Modifier) {
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { adding = NutritionMath.mealFor(LocalTime.now()) },
-                shape = RoundedCornerShape(16.dp),
-            ) { Icon(Icons.Filled.Add, "Essen eintragen") }
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                SmallFloatingActionButton(
+                    onClick = { startPhoto() },
+                    shape = RoundedCornerShape(12.dp),
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                ) {
+                    if (analysis is PhotoAnalysis.Running) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Filled.PhotoCamera, "Essen fotografieren")
+                    }
+                }
+                FloatingActionButton(
+                    onClick = { adding = NutritionMath.mealFor(LocalTime.now()) },
+                    shape = RoundedCornerShape(16.dp),
+                ) { Icon(Icons.Filled.Add, "Essen eintragen") }
+            }
         },
     ) { padding ->
         PullToRefreshBox(
@@ -243,6 +353,19 @@ fun NutritionScreen(modifier: Modifier = Modifier) {
                             buttonText = "Profil eintragen",
                             onClick = { showProfile = true },
                         )
+                    }
+                    if (analysis is PhotoAnalysis.Running) {
+                        Card(
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(12.dp))
+                                Text("Foto wird erkannt … das dauert ein paar Sekunden.")
+                            }
+                        }
                     }
                     MealType.entries.forEach { meal ->
                         MealCard(
@@ -280,6 +403,44 @@ fun NutritionScreen(modifier: Modifier = Modifier) {
                 editing = null
             },
         )
+    }
+    if (showPhotoSource) {
+        PhotoSourceDialog(
+            onDismiss = { showPhotoSource = false },
+            onCamera = { showPhotoSource = false; startCamera() },
+            onGallery = {
+                showPhotoSource = false
+                pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            },
+        )
+    }
+    if (showApiKey) {
+        ApiKeyDialog(
+            onDismiss = { showApiKey = false },
+            onSave = { key ->
+                vm.setApiKey(key)
+                showApiKey = false
+                showPhotoSource = true
+            },
+        )
+    }
+    when (val a = analysis) {
+        is PhotoAnalysis.Done -> RecognitionDialog(
+            result = a.result,
+            defaultMeal = NutritionMath.mealFor(LocalTime.now()),
+            onDismiss = vm::dismissAnalysis,
+            onSave = vm::saveRecognized,
+        )
+        is PhotoAnalysis.Failed -> AlertDialog(
+            onDismissRequest = vm::dismissAnalysis,
+            title = { Text("Erkennung fehlgeschlagen") },
+            text = { Text(a.message) },
+            confirmButton = { TextButton(onClick = vm::dismissAnalysis) { Text("OK") } },
+            dismissButton = if (!visionConfigured || a.message.contains("Schlüssel")) {
+                { TextButton(onClick = { vm.dismissAnalysis(); showApiKey = true }) { Text("Schlüssel eintragen") } }
+            } else null,
+        )
+        else -> Unit
     }
     if (showProfile) {
         ProfileDialog(
@@ -666,3 +827,160 @@ fun ProfileDialog(
         dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } },
     )
 }
+
+/** Zustand der Foto-Erkennung. */
+sealed interface PhotoAnalysis {
+    data object Idle : PhotoAnalysis
+    data object Running : PhotoAnalysis
+    data class Done(val result: FoodRecognition) : PhotoAnalysis
+    data class Failed(val message: String) : PhotoAnalysis
+}
+
+/** Dialog: Foto aufnehmen oder aus der Galerie wählen. */
+@Composable
+private fun PhotoSourceDialog(onDismiss: () -> Unit, onCamera: () -> Unit, onGallery: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Essen fotografieren") },
+        text = {
+            Text(
+                "Fotografiere deinen Teller oder die Verpackung (gern die Nährwerttabelle). " +
+                    "Die App erkennt die Lebensmittel und schätzt die Kalorien – du kannst alles vor dem Eintragen anpassen.",
+            )
+        },
+        confirmButton = { TextButton(onClick = onCamera) { Icon(Icons.Filled.PhotoCamera, null); Spacer(Modifier.width(6.dp)); Text("Kamera") } },
+        dismissButton = { TextButton(onClick = onGallery) { Icon(Icons.Filled.PhotoLibrary, null); Spacer(Modifier.width(6.dp)); Text("Galerie") } },
+    )
+}
+
+/** Erkannte Lebensmittel prüfen, anpassen und eintragen. */
+@Composable
+private fun RecognitionDialog(
+    result: FoodRecognition,
+    defaultMeal: MealType,
+    onDismiss: () -> Unit,
+    onSave: (items: List<RecognizedFood>, meal: MealType) -> Unit,
+) {
+    var items by remember { mutableStateOf(result.items) }
+    var selected by remember { mutableStateOf(result.items.indices.toSet()) }
+    var meal by remember { mutableStateOf(result.mealGuess ?: defaultMeal) }
+    val total = items.filterIndexed { i, _ -> i in selected }.sumOf { it.kcal }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (items.isEmpty()) "Nichts erkannt" else "Erkannt: ${kcal(total)} kcal") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (result.note.isNotBlank()) {
+                    Text(result.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (items.isEmpty()) {
+                    Text("Auf dem Foto war kein Essen zu erkennen. Versuch es mit mehr Licht oder näher dran.")
+                }
+                items.forEachIndexed { i, item ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = i in selected,
+                            onCheckedChange = { selected = if (it) selected + i else selected - i },
+                        )
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            OutlinedTextField(
+                                value = item.name,
+                                onValueChange = { v -> items = items.toMutableList().also { l -> l[i] = item.copy(name = v) } },
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                OutlinedTextField(
+                                    value = if (item.kcal > 0) item.kcal.toString() else "",
+                                    onValueChange = { v ->
+                                        items = items.toMutableList().also { l -> l[i] = item.copy(kcal = v.filter { it.isDigit() }.toIntOrNull() ?: 0) }
+                                    },
+                                    label = { Text("kcal") },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    textStyle = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                OutlinedTextField(
+                                    value = item.amount,
+                                    onValueChange = { v -> items = items.toMutableList().also { l -> l[i] = item.copy(amount = v) } },
+                                    label = { Text("Menge") },
+                                    singleLine = true,
+                                    textStyle = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                            if (item.confidence == "niedrig") {
+                                Text("Unsichere Schätzung – bitte prüfen", style = MaterialTheme.typography.labelSmall, color = NutritionColors.Eaten)
+                            }
+                        }
+                    }
+                }
+                if (items.isNotEmpty()) {
+                    Text("Mahlzeit", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        MealType.entries.forEach { m ->
+                            FilterChip(selected = meal == m, onClick = { meal = m }, label = { Text(m.label) })
+                        }
+                    }
+                    Text(
+                        "Schätzungen können deutlich abweichen – besonders bei Soßen, Öl und Portionsgrößen.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            if (items.isNotEmpty()) {
+                TextButton(
+                    enabled = selected.isNotEmpty() && items.filterIndexed { i, _ -> i in selected }.all { it.name.isNotBlank() },
+                    onClick = { onSave(items.filterIndexed { i, _ -> i in selected }, meal) },
+                ) { Text("Eintragen") }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(if (items.isEmpty()) "Schließen" else "Abbrechen") } },
+    )
+}
+
+/** Einmalig den API-Schlüssel für die Foto-Erkennung eintragen. */
+@Composable
+fun ApiKeyDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    val context = LocalContext.current
+    var key by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Foto-Erkennung einrichten") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "Die Erkennung läuft über die Claude-API von Anthropic. Dafür brauchst du einmalig einen eigenen API-Schlüssel " +
+                        "(mit etwas Guthaben; ein Foto kostet ungefähr einen Cent).",
+                )
+                OutlinedTextField(
+                    value = key,
+                    onValueChange = { key = it },
+                    placeholder = { Text("sk-ant-…") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                TextButton(onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, ApiKeyUrl.toUri())) } }) {
+                    Text("Schlüssel bei Anthropic erstellen")
+                }
+                Text(
+                    "Der Schlüssel bleibt auf deinem Handy und wird nicht gesichert. Fotos werden nur für die Erkennung übertragen und nicht gespeichert.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = { TextButton(enabled = key.isNotBlank(), onClick = { onSave(key) }) { Text("Speichern") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } },
+    )
+}
+
+const val ApiKeyUrl = "https://platform.claude.com/settings/keys"

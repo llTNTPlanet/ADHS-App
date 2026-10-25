@@ -24,8 +24,19 @@ class SecretStore(context: Context) {
         _githubToken.value = value
     }
 
+    private val _anthropicApiKey = MutableStateFlow(prefs.getString(KEY_ANTHROPIC, null))
+    /** API-Schlüssel für die Foto-Erkennung von Mahlzeiten (Claude). */
+    val anthropicApiKey: StateFlow<String?> = _anthropicApiKey.asStateFlow()
+
+    fun setAnthropicApiKey(key: String?) {
+        val value = key?.trim()?.takeIf { it.isNotEmpty() }
+        prefs.edit { if (value == null) remove(KEY_ANTHROPIC) else putString(KEY_ANTHROPIC, value) }
+        _anthropicApiKey.value = value
+    }
+
     companion object {
         const val FILE = "secrets"
         private const val KEY_GITHUB_TOKEN = "github_token"
+        private const val KEY_ANTHROPIC = "anthropic_api_key"
     }
 }

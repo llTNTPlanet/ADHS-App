@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Ab Android 12: Zugangsdaten (GitHub-Token) weder ins Cloud-Backup noch auf ein neues Gerät übertragen. -->
+<!-- Ab Android 12: Zugangsdaten (GitHub-Token, API-Schlüssel) weder ins Cloud-Backup noch auf ein neues Gerät übertragen. -->
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="sharedpref" path="secrets.xml" />

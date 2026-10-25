@@ -15,6 +15,7 @@ import de.lltntplanet.adhsapp.data.google.GoogleTasksApi
 import de.lltntplanet.adhsapp.data.google.GoogleTasksSync
 import de.lltntplanet.adhsapp.data.google.HealthApi
 import de.lltntplanet.adhsapp.data.health.HealthRepository
+import de.lltntplanet.adhsapp.data.nutrition.FoodVisionClient
 import de.lltntplanet.adhsapp.data.nutrition.NutritionRepository
 import de.lltntplanet.adhsapp.data.settings.SecretStore
 import de.lltntplanet.adhsapp.data.settings.SettingsRepository
@@ -62,7 +63,7 @@ open class AdhsApp : Application() {
 }
 
 /** Einfache manuelle Abhängigkeitsverwaltung. */
-class AppContainer(app: Application) {
+class AppContainer(val app: Application) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val settings = SettingsRepository(app)
@@ -83,6 +84,7 @@ class AppContainer(app: Application) {
 
     val secrets = SecretStore(app)
     val updateNotifier = UpdateNotifier(app)
+    val foodVision = FoodVisionClient({ secrets.anthropicApiKey.value })
     val updates = UpdateManager(app, settings, secrets, GitHubReleaseClient(), ApkInstaller(app), updateNotifier, scope)
 
     private var rescheduleJob: Job? = null
