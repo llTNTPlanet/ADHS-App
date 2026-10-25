@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Cake
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Icon
@@ -24,6 +25,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -37,6 +39,7 @@ import de.lltntplanet.adhsapp.ui.calendar.CalendarScreen
 import de.lltntplanet.adhsapp.ui.calendar.EventEditorScreen
 import de.lltntplanet.adhsapp.ui.components.appContainer
 import de.lltntplanet.adhsapp.ui.health.HealthScreen
+import de.lltntplanet.adhsapp.ui.nutrition.NutritionScreen
 import de.lltntplanet.adhsapp.ui.settings.SettingsScreen
 import de.lltntplanet.adhsapp.ui.settings.SetupScreen
 import de.lltntplanet.adhsapp.ui.tasks.TasksScreen
@@ -51,6 +54,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
     TASKS("tasks", "Aufgaben", Icons.Filled.TaskAlt),
     BIRTHDAYS("birthdays", "Geburtstage", Icons.Filled.Cake),
     HEALTH("health", "Gesundheit", Icons.Filled.Favorite),
+    NUTRITION("nutrition", "Essen", Icons.Filled.Restaurant),
 }
 
 private fun NavHostController.openTab(tab: Tab) {
@@ -96,7 +100,7 @@ fun AppRoot(requestedTab: Tab?, onTabHandled: () -> Unit) {
                             selected = route == tab.route,
                             onClick = { nav.openTab(tab) },
                             icon = { Icon(tab.icon, contentDescription = null) },
-                            label = { Text(tab.label, maxLines = 1) },
+                            label = { Text(tab.label, maxLines = 1, softWrap = false, fontSize = 10.sp) },
                             modifier = Modifier.testTag("tab-${tab.route}"),
                         )
                     }
@@ -129,6 +133,7 @@ fun AppRoot(requestedTab: Tab?, onTabHandled: () -> Unit) {
             composable(Tab.TASKS.route) { TasksScreen() }
             composable(Tab.BIRTHDAYS.route) { BirthdaysScreen() }
             composable(Tab.HEALTH.route) { HealthScreen() }
+            composable(Tab.NUTRITION.route) { NutritionScreen() }
             composable("settings") {
                 SettingsScreen(onBack = { nav.popBackStack() }, onOpenSetup = { nav.navigate("setup") })
             }

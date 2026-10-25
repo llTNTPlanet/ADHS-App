@@ -63,3 +63,24 @@ data class SnoozeEntity(
     val triggerAt: Long,
     val payload: String,
 )
+
+enum class MealType(val label: String) {
+    BREAKFAST("Morgens"),
+    LUNCH("Mittags"),
+    DINNER("Abends"),
+    SNACK("Zwischendurch"),
+}
+
+/** Ein gegessenes Lebensmittel / eine Mahlzeit mit Kalorien. */
+@Entity(tableName = "food_entries", indices = [Index(value = ["epochDay"])])
+data class FoodEntryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    /** Tag als epochDay (LocalDate.toEpochDay). */
+    val epochDay: Long,
+    val meal: MealType,
+    val name: String,
+    val kcal: Int,
+    /** Optionale Menge, z. B. "200 g" oder "1 Stück". */
+    val amount: String = "",
+    val createdAt: Long = System.currentTimeMillis(),
+)

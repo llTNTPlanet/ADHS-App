@@ -17,6 +17,9 @@ import androidx.work.testing.WorkManagerTestInitHelper
 import de.lltntplanet.adhsapp.AdhsApp
 import de.lltntplanet.adhsapp.MainActivity
 import de.lltntplanet.adhsapp.data.db.BirthdayEntity
+import de.lltntplanet.adhsapp.data.db.FoodEntryEntity
+import de.lltntplanet.adhsapp.data.db.MealType
+import de.lltntplanet.adhsapp.data.settings.Sex
 import de.lltntplanet.adhsapp.data.db.Repeat
 import de.lltntplanet.adhsapp.data.db.TaskEntity
 import de.lltntplanet.adhsapp.data.google.GoogleJson
@@ -125,6 +128,14 @@ class ScreenshotTest {
             restingHeartRate = days.mapIndexed { i, d -> HeartDay(d.toEpochDay(), 58L + (i % 3)) },
         )
         c.settings.saveHealthCache(GoogleJson.encodeToString(snapshot))
+
+        c.settings.update { it.copy(sex = Sex.MALE, birthYear = 1994, heightCm = 180, weightKg = 78.0, calorieAdjustment = -300) }
+        val food = c.db.foodDao()
+        val t0 = today.atTime(7, 40).atZone(zone).toInstant().toEpochMilli()
+        food.upsert(FoodEntryEntity(epochDay = today.toEpochDay(), meal = MealType.BREAKFAST, name = "Haferflocken mit Banane", kcal = 420, amount = "1 Schüssel", createdAt = t0))
+        food.upsert(FoodEntryEntity(epochDay = today.toEpochDay(), meal = MealType.BREAKFAST, name = "Kaffee mit Milch", kcal = 40, createdAt = t0 + 5 * 60_000L))
+        food.upsert(FoodEntryEntity(epochDay = today.toEpochDay(), meal = MealType.LUNCH, name = "Linsensuppe", kcal = 510, amount = "1 Teller", createdAt = t0 + 5 * 3_600_000L))
+        food.upsert(FoodEntryEntity(epochDay = today.toEpochDay(), meal = MealType.SNACK, name = "Apfel", kcal = 95, amount = "1 Stück", createdAt = t0 + 8 * 3_600_000L))
     }
 
     /** Daten werden auf IO-Threads geladen – kurz warten und die Oberfläche nachziehen lassen. */
@@ -176,6 +187,8 @@ class ScreenshotTest {
             shot("08-geburtstage")
             clickTab("health")
             shot("09-gesundheit")
+            clickTab("nutrition")
+            shot("10-ernaehrung")
         }
     }
 
@@ -188,7 +201,7 @@ class ScreenshotTest {
             refId = 1, color = 0xFF33B679.toInt(),
         )
         ActivityScenario.launch<ReminderActivity>(ReminderActivity.intent(app, listOf(event))).use {
-            shot(it, "10-vollbild-termin")
+            shot(it, "11-vollbild-termin")
         }
         val task = Reminder(
             key = "task:2:1:480", kind = ReminderKind.TASK, triggerAt = now, title = "Tabletten nehmen",
@@ -199,7 +212,7 @@ class ScreenshotTest {
             targetTime = now, allDay = true, age = 34, daysBefore = 0,
         )
         ActivityScenario.launch<ReminderActivity>(ReminderActivity.intent(app, listOf(task, birthday))).use {
-            shot(it, "11-vollbild-aufgabe")
+            shot(it, "12-vollbild-aufgabe")
         }
     }
 }

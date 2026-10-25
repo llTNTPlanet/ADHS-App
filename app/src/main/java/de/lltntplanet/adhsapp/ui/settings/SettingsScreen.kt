@@ -165,6 +165,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenSetup: () -> Unit) {
     val next by vm.next.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
+    var showProfile by remember { mutableStateOf(false) }
     var timePicker by remember { mutableStateOf<String?>(null) }
     val connect = rememberGoogleConnector { feature, result -> vm.onConnect(feature, result) }
     var permissions by remember { mutableStateOf(Permissions.state(context)) }
@@ -357,6 +358,19 @@ fun SettingsScreen(onBack: () -> Unit, onOpenSetup: () -> Unit) {
                 Text("Google-Konto: $it", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
             }
 
+            // Ernährung
+            Section("Ernährung")
+            val bmr = de.lltntplanet.adhsapp.data.nutrition.NutritionMath.basalMetabolicRate(s)
+            ClickSetting(
+                "Profil für den Grundumsatz",
+                if (bmr != null) "$bmr kcal" else "Eintragen",
+            ) { showProfile = true }
+            Text(
+                "Geschlecht, Geburtsjahr, Größe und Gewicht – daraus berechnet die Seite „Essen“ deinen Grundumsatz.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
             UpdateSettingsSection()
 
             Section("Über")
@@ -371,6 +385,16 @@ fun SettingsScreen(onBack: () -> Unit, onOpenSetup: () -> Unit) {
         }
     }
 
+    if (showProfile) {
+        de.lltntplanet.adhsapp.ui.nutrition.ProfileDialog(
+            settings = s,
+            onDismiss = { showProfile = false },
+            onSave = { sex, year, height, weight, adjustment ->
+                vm.update { it.copy(sex = sex, birthYear = year, heightCm = height, weightKg = weight, calorieAdjustment = adjustment) }
+                showProfile = false
+            },
+        )
+    }
     timePicker?.let { which ->
         val minutes = when (which) {
             "allday" -> s.allDayReminderMinutes

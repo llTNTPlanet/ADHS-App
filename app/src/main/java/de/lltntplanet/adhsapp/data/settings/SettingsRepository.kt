@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
@@ -22,6 +23,8 @@ enum class CalendarViewMode(val label: String) {
     WEEK("Woche"),
     MONTH("Monat"),
 }
+
+enum class Sex(val label: String) { MALE("Männlich"), FEMALE("Weiblich") }
 
 data class AppSettings(
     /** Zusätzliche Vorwarnungen vor Terminen in Minuten (0 = zu Beginn). */
@@ -52,6 +55,13 @@ data class AppSettings(
     /** Wecker-Modus: setAlarmClock() – maximal zuverlässig, zeigt aber ein Wecker-Symbol. */
     val alarmClockMode: Boolean = false,
     val stepGoal: Int = 8000,
+    /** Ernährungsprofil für den Grundumsatz (Mifflin-St-Jeor). */
+    val sex: Sex? = null,
+    val birthYear: Int? = null,
+    val heightCm: Int? = null,
+    val weightKg: Double? = null,
+    /** Kalorien, die täglich vom Budget abgezogen (negativ) oder draufgelegt werden (z. B. -300 zum Abnehmen). */
+    val calorieAdjustment: Int = 0,
     val healthConnected: Boolean = false,
     val tasksConnected: Boolean = false,
     val googleAccount: String? = null,
@@ -92,6 +102,11 @@ class SettingsRepository(private val context: Context) {
         val ringSeconds = intPreferencesKey("ring_seconds")
         val alarmClockMode = booleanPreferencesKey("alarm_clock_mode")
         val stepGoal = intPreferencesKey("step_goal")
+        val sex = stringPreferencesKey("sex")
+        val birthYear = intPreferencesKey("birth_year")
+        val heightCm = intPreferencesKey("height_cm")
+        val weightKg = doublePreferencesKey("weight_kg")
+        val calorieAdjustment = intPreferencesKey("calorie_adjustment")
         val healthConnected = booleanPreferencesKey("health_connected")
         val tasksConnected = booleanPreferencesKey("tasks_connected")
         val googleAccount = stringPreferencesKey("google_account")
@@ -136,6 +151,11 @@ class SettingsRepository(private val context: Context) {
             ringSeconds = this[Keys.ringSeconds] ?: d.ringSeconds,
             alarmClockMode = this[Keys.alarmClockMode] ?: d.alarmClockMode,
             stepGoal = this[Keys.stepGoal] ?: d.stepGoal,
+            sex = this[Keys.sex]?.let { v -> Sex.entries.find { it.name == v } },
+            birthYear = this[Keys.birthYear],
+            heightCm = this[Keys.heightCm],
+            weightKg = this[Keys.weightKg],
+            calorieAdjustment = this[Keys.calorieAdjustment] ?: d.calorieAdjustment,
             healthConnected = this[Keys.healthConnected] ?: d.healthConnected,
             tasksConnected = this[Keys.tasksConnected] ?: d.tasksConnected,
             googleAccount = this[Keys.googleAccount],
@@ -178,6 +198,11 @@ class SettingsRepository(private val context: Context) {
         this[Keys.ringSeconds] = s.ringSeconds
         this[Keys.alarmClockMode] = s.alarmClockMode
         this[Keys.stepGoal] = s.stepGoal
+        if (s.sex != null) this[Keys.sex] = s.sex.name else remove(Keys.sex)
+        if (s.birthYear != null) this[Keys.birthYear] = s.birthYear else remove(Keys.birthYear)
+        if (s.heightCm != null) this[Keys.heightCm] = s.heightCm else remove(Keys.heightCm)
+        if (s.weightKg != null) this[Keys.weightKg] = s.weightKg else remove(Keys.weightKg)
+        this[Keys.calorieAdjustment] = s.calorieAdjustment
         this[Keys.healthConnected] = s.healthConnected
         this[Keys.tasksConnected] = s.tasksConnected
         if (s.googleAccount != null) this[Keys.googleAccount] = s.googleAccount else remove(Keys.googleAccount)

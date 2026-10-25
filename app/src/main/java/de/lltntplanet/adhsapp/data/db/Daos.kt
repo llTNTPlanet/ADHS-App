@@ -83,3 +83,22 @@ interface ReminderDao {
     @Query("DELETE FROM snoozes WHERE id = :id")
     suspend fun deleteSnooze(id: Long)
 }
+
+@Dao
+interface FoodDao {
+    @Query("SELECT * FROM food_entries WHERE epochDay = :epochDay ORDER BY createdAt")
+    fun observeDay(epochDay: Long): Flow<List<FoodEntryEntity>>
+
+    @Query("SELECT * FROM food_entries WHERE epochDay BETWEEN :fromDay AND :toDay ORDER BY epochDay, createdAt")
+    fun observeRange(fromDay: Long, toDay: Long): Flow<List<FoodEntryEntity>>
+
+    /** Zuletzt eingetragene Lebensmittel (je Name einmal) als Vorschläge. */
+    @Query("SELECT * FROM food_entries WHERE id IN (SELECT MAX(id) FROM food_entries GROUP BY LOWER(name)) ORDER BY createdAt DESC LIMIT :limit")
+    suspend fun recent(limit: Int): List<FoodEntryEntity>
+
+    @Upsert
+    suspend fun upsert(entry: FoodEntryEntity): Long
+
+    @Delete
+    suspend fun delete(entry: FoodEntryEntity)
+}
