@@ -15,6 +15,7 @@ import de.lltntplanet.adhsapp.data.google.GoogleTasksApi
 import de.lltntplanet.adhsapp.data.google.GoogleTasksSync
 import de.lltntplanet.adhsapp.data.google.HealthApi
 import de.lltntplanet.adhsapp.data.health.HealthRepository
+import de.lltntplanet.adhsapp.data.nutrition.NutritionRepository
 import de.lltntplanet.adhsapp.data.settings.SecretStore
 import de.lltntplanet.adhsapp.data.settings.SettingsRepository
 import de.lltntplanet.adhsapp.data.sync.DataRefresher
@@ -69,6 +70,7 @@ class AppContainer(app: Application) {
     val calendar = CalendarRepository(app)
     val birthdays = BirthdayRepository(app, db.birthdayDao(), calendar, settings)
     val tasks = TaskRepository(db.taskDao()) { requestReschedule() }
+    val nutrition = NutritionRepository(db.foodDao())
 
     val auth = GoogleAuth(app, settings)
     private val http = GoogleHttp(GoogleAuthTokenProvider(auth))

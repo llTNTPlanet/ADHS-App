@@ -5,13 +5,13 @@ Dazu: dein **Google Kalender** im gewohnten Google-Look und deine **Google-Healt
 
 | Heute | Kalender | Woche | Vollbild-Erinnerung |
 |---|---|---|---|
-| ![Heute](docs/screenshots/02-heute.png) | ![Terminübersicht](docs/screenshots/03-kalender-terminuebersicht.png) | ![Woche](docs/screenshots/04-kalender-woche.png) | ![Vollbild](docs/screenshots/10-vollbild-termin.png) |
+| ![Heute](docs/screenshots/02-heute.png) | ![Terminübersicht](docs/screenshots/03-kalender-terminuebersicht.png) | ![Woche](docs/screenshots/04-kalender-woche.png) | ![Vollbild](docs/screenshots/11-vollbild-termin.png) |
 
 | Aufgaben | Geburtstage | Gesundheit | Einrichtung |
 |---|---|---|---|
 | ![Aufgaben](docs/screenshots/07-aufgaben.png) | ![Geburtstage](docs/screenshots/08-geburtstage.png) | ![Gesundheit](docs/screenshots/09-gesundheit.png) | ![Einrichtung](docs/screenshots/01-einrichtung.png) |
 
-Weitere Bilder: [Monat](docs/screenshots/06-kalender-monat.png), [3 Tage](docs/screenshots/05-kalender-3-tage.png), [Vollbild Aufgabe](docs/screenshots/11-vollbild-aufgabe.png).
+Weitere Bilder: [Essen](docs/screenshots/10-ernaehrung.png), [Monat](docs/screenshots/06-kalender-monat.png), [3 Tage](docs/screenshots/05-kalender-3-tage.png), [Vollbild Aufgabe](docs/screenshots/12-vollbild-aufgabe.png).
 
 ## Was die App kann
 
@@ -50,6 +50,14 @@ Weitere Bilder: [Monat](docs/screenshots/06-kalender-monat.png), [3 Tage](docs/s
 - Neue Versionen erscheinen nach jedem Merge auf `main` automatisch als GitHub-Release
 - Die App meldet ein Update sofort beim Öffnen (Dialog) bzw. im Hintergrund (Benachrichtigung)
   und installiert es automatisch oder nach deiner Bestätigung
+
+**Essen** – Kalorien und Mahlzeiten
+- Bunte Tagesbilanz auf einen Blick: Grundumsatz, Bewegung & Training (aus Google Health), Gegessen und
+  „Noch frei“ als Ring und Balken; drüber wird rot
+- Grundumsatz aus deinem Profil (Geschlecht, Geburtsjahr, Größe, Gewicht, Mifflin-St-Jeor-Formel), optional mit
+  Defizit (z. B. −300 kcal zum Abnehmen)
+- Mahlzeiten Morgens / Mittags / Abends / Zwischendurch mit Einträgen (Name, kcal, Menge); Vorschläge aus den
+  letzten Einträgen; Pfeile zum Blättern durch die Tage wie in Google Health
 
 **Gesundheit** (Google Health API)
 - Schritte heute mit Ziel-Ring, 7-Tage-Verlauf, Strecke, Aktivzonenminuten, Kalorien
@@ -191,10 +199,10 @@ Der GitHub-Token für Updates liegt im privaten App-Speicher und ist von Geräte
 
 ```
 app/src/main/java/de/lltntplanet/adhsapp/
-├── data/          Kalender, Geburtstage, Aufgaben (Room), Einstellungen, Google-APIs, Gesundheit
+├── data/          Kalender, Geburtstage, Aufgaben (Room), Einstellungen, Google-APIs, Gesundheit, Ernährung
 ├── reminders/     Planung, Alarme, Benachrichtigung, Vollbild-Activity, Hintergrund-Jobs
 ├── update/        Selbst-Update aus GitHub-Releases (Prüfung, Download, Installation)
-├── ui/            Heute, Kalender, Aufgaben, Geburtstage, Gesundheit, Einstellungen, Einrichtung
+├── ui/            Heute, Kalender, Aufgaben, Geburtstage, Gesundheit, Essen, Einstellungen, Einrichtung
 └── util/          Zeitformate (deutsch), Berechtigungen
 ```
 
