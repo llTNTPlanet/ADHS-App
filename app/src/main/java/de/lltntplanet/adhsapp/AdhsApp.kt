@@ -16,8 +16,12 @@ import de.lltntplanet.adhsapp.data.google.GoogleTasksSync
 import de.lltntplanet.adhsapp.data.google.HealthApi
 import de.lltntplanet.adhsapp.data.health.HealthRepository
 import de.lltntplanet.adhsapp.data.nutrition.FoodVisionClient
+import de.lltntplanet.adhsapp.data.nutrition.FoodVisionRouter
+import de.lltntplanet.adhsapp.data.nutrition.GeminiFoodVisionClient
+import de.lltntplanet.adhsapp.data.nutrition.HealthConnectNutrition
 import de.lltntplanet.adhsapp.data.nutrition.NutritionRepository
 import de.lltntplanet.adhsapp.data.settings.SecretStore
+import de.lltntplanet.adhsapp.data.settings.AppSettings
 import de.lltntplanet.adhsapp.data.settings.SettingsRepository
 import de.lltntplanet.adhsapp.data.sync.DataRefresher
 import de.lltntplanet.adhsapp.data.sync.RefreshWorker
@@ -36,6 +40,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 open class AdhsApp : Application() {
@@ -67,11 +74,14 @@ class AppContainer(val app: Application) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val settings = SettingsRepository(app)
+    /** Zuletzt bekannte Einstellungen ohne Warten (für synchrone Abfragen). */
+    val settingsState: StateFlow<AppSettings> = settings.settings.stateIn(scope, SharingStarted.Eagerly, AppSettings())
     val db = AppDatabase.create(app)
     val calendar = CalendarRepository(app)
     val birthdays = BirthdayRepository(app, db.birthdayDao(), calendar, settings)
     val tasks = TaskRepository(db.taskDao()) { requestReschedule() }
-    val nutrition = NutritionRepository(db.foodDao())
+    val healthConnect = HealthConnectNutrition(app)
+    val nutrition = NutritionRepository(db.foodDao(), healthConnect, settings)
 
     val auth = GoogleAuth(app, settings)
     private val http = GoogleHttp(GoogleAuthTokenProvider(auth))
@@ -84,7 +94,11 @@ class AppContainer(val app: Application) {
 
     val secrets = SecretStore(app)
     val updateNotifier = UpdateNotifier(app)
-    val foodVision = FoodVisionClient({ secrets.anthropicApiKey.value })
+    val foodVision = FoodVisionRouter(
+        provider = { settingsState.value.foodVisionProvider },
+        gemini = GeminiFoodVisionClient({ secrets.geminiApiKey.value }),
+        claude = FoodVisionClient({ secrets.anthropicApiKey.value }),
+    )
     val updates = UpdateManager(app, settings, secrets, GitHubReleaseClient(), ApkInstaller(app), updateNotifier, scope)
 
     private var rescheduleJob: Job? = null

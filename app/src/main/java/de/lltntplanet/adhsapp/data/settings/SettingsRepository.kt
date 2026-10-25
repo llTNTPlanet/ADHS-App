@@ -12,6 +12,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import de.lltntplanet.adhsapp.data.nutrition.FoodVisionProvider
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -62,6 +63,10 @@ data class AppSettings(
     val weightKg: Double? = null,
     /** Kalorien, die täglich vom Budget abgezogen (negativ) oder draufgelegt werden (z. B. -300 zum Abnehmen). */
     val calorieAdjustment: Int = 0,
+    /** Dienst für die Foto-Erkennung von Mahlzeiten. */
+    val foodVisionProvider: FoodVisionProvider = FoodVisionProvider.GEMINI,
+    /** Mahlzeiten zusätzlich in Health Connect schreiben (Google Health liest sie von dort). */
+    val healthConnectExport: Boolean = false,
     val healthConnected: Boolean = false,
     val tasksConnected: Boolean = false,
     val googleAccount: String? = null,
@@ -107,6 +112,8 @@ class SettingsRepository(private val context: Context) {
         val heightCm = intPreferencesKey("height_cm")
         val weightKg = doublePreferencesKey("weight_kg")
         val calorieAdjustment = intPreferencesKey("calorie_adjustment")
+        val foodVisionProvider = stringPreferencesKey("food_vision_provider")
+        val healthConnectExport = booleanPreferencesKey("health_connect_export")
         val healthConnected = booleanPreferencesKey("health_connected")
         val tasksConnected = booleanPreferencesKey("tasks_connected")
         val googleAccount = stringPreferencesKey("google_account")
@@ -156,6 +163,9 @@ class SettingsRepository(private val context: Context) {
             heightCm = this[Keys.heightCm],
             weightKg = this[Keys.weightKg],
             calorieAdjustment = this[Keys.calorieAdjustment] ?: d.calorieAdjustment,
+            foodVisionProvider = this[Keys.foodVisionProvider]?.let { v -> FoodVisionProvider.entries.find { it.name == v } }
+                ?: d.foodVisionProvider,
+            healthConnectExport = this[Keys.healthConnectExport] ?: d.healthConnectExport,
             healthConnected = this[Keys.healthConnected] ?: d.healthConnected,
             tasksConnected = this[Keys.tasksConnected] ?: d.tasksConnected,
             googleAccount = this[Keys.googleAccount],
@@ -203,6 +213,8 @@ class SettingsRepository(private val context: Context) {
         if (s.heightCm != null) this[Keys.heightCm] = s.heightCm else remove(Keys.heightCm)
         if (s.weightKg != null) this[Keys.weightKg] = s.weightKg else remove(Keys.weightKg)
         this[Keys.calorieAdjustment] = s.calorieAdjustment
+        this[Keys.foodVisionProvider] = s.foodVisionProvider.name
+        this[Keys.healthConnectExport] = s.healthConnectExport
         this[Keys.healthConnected] = s.healthConnected
         this[Keys.tasksConnected] = s.tasksConnected
         if (s.googleAccount != null) this[Keys.googleAccount] = s.googleAccount else remove(Keys.googleAccount)
