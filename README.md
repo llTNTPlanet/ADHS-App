@@ -58,6 +58,10 @@ Weitere Bilder: [Essen](docs/screenshots/10-ernaehrung.png), [Monat](docs/screen
   Defizit (z. B. −300 kcal zum Abnehmen)
 - Mahlzeiten Morgens / Mittags / Abends / Zwischendurch mit Einträgen (Name, kcal, Menge); Vorschläge aus den
   letzten Einträgen; Pfeile zum Blättern durch die Tage wie in Google Health
+- **Foto-Erkennung:** Teller oder Verpackung fotografieren (Kamera oder Galerie) – die App erkennt die Lebensmittel,
+  liest Nährwerttabellen und schätzt die Kalorien; alles lässt sich vor dem Eintragen prüfen und anpassen.
+  Braucht einmalig einen eigenen Claude-API-Schlüssel (Einstellungen → Ernährung), ein Foto kostet ungefähr einen Cent;
+  Fotos werden nur für die Erkennung übertragen und nicht gespeichert
 
 **Gesundheit** (Google Health API)
 - Schritte heute mit Ziel-Ring, 7-Tage-Verlauf, Strecke, Aktivzonenminuten, Kalorien
@@ -188,6 +192,8 @@ Der GitHub-Token für Updates liegt im privaten App-Speicher und ist von Geräte
 - Kotlin, Jetpack Compose (Material 3), Room, DataStore, WorkManager
 - Google Kalender über den Kalender-Speicher von Android (`CalendarContract`) – offline-fähig, keine Cloud-Freigabe nötig
 - Google Health API v4 (`health.googleapis.com`) und Google Tasks API über `AuthorizationClient` (Google Identity Services) und OkHttp
+- Foto-Erkennung von Mahlzeiten über die Claude Messages API (`api.anthropic.com`, Modell `claude-opus-5-5`, Bildeingabe,
+  strukturierte JSON-Ausgabe, Server-Fallback bei Ablehnung); Foto wird vorher auf 1280 px verkleinert
 - Erinnerungen: genau ein exakter Alarm auf die jeweils nächste Erinnerung (`AlarmManager`), Benachrichtigung mit
   Full-Screen-Intent, Vollbild-Activity über dem Sperrbildschirm; Neuplanung nach Neustart, Zeitänderung,
   Kalender-/Kontaktänderungen und alle 30 Minuten als Sicherheitsnetz

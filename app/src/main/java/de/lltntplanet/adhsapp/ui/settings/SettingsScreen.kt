@@ -370,6 +370,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenSetup: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            de.lltntplanet.adhsapp.ui.nutrition.FoodVisionKeySetting()
 
             UpdateSettingsSection()
 
