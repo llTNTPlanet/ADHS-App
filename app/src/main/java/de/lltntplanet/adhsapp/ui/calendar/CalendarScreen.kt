@@ -45,6 +45,7 @@ import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -95,6 +96,7 @@ fun CalendarScreen(
     val calendars by vm.calendars.collectAsStateWithLifecycle()
     val version by vm.version.collectAsStateWithLifecycle()
     val anchor by vm.anchor.collectAsStateWithLifecycle()
+    val refreshing by vm.refreshing.collectAsStateWithLifecycle()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val zone = remember { ZoneId.systemDefault() }
@@ -215,7 +217,13 @@ fun CalendarScreen(
                 }
             },
         ) { padding ->
-            Box(Modifier.padding(padding).fillMaxSize()) {
+            // Herunterziehen aktualisiert alles; in den Tages-/Wochenansichten greift es, wenn man nicht nach oben scrollen kann.
+            PullToRefreshBox(
+                isRefreshing = refreshing,
+                onRefresh = vm::refreshAll,
+                modifier = Modifier.padding(padding).fillMaxSize(),
+            ) {
+            Box(Modifier.fillMaxSize()) {
                 if (!hasPermission) {
                     Column(Modifier.padding(16.dp)) {
                         InfoCard(
@@ -268,6 +276,7 @@ fun CalendarScreen(
                         }
                     }
                 }
+            }
             }
         }
     }

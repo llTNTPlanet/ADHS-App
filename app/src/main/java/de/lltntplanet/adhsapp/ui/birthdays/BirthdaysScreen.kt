@@ -35,6 +35,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -61,6 +62,7 @@ import de.lltntplanet.adhsapp.ui.components.appViewModel
 import de.lltntplanet.adhsapp.ui.theme.AppColors
 import de.lltntplanet.adhsapp.util.TimeFormat
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
@@ -73,7 +75,9 @@ import java.time.LocalDate
 class BirthdaysViewModel(private val c: AppContainer) : ViewModel() {
     private val refresh = MutableStateFlow(0)
 
-    val upcoming: StateFlow<List<UpcomingBirthday>?> = refresh
+    val refreshing: StateFlow<Boolean> = c.refresher.refreshing
+
+    val upcoming: StateFlow<List<UpcomingBirthday>?> = combine(refresh, c.refresher.changes) { a, b -> a + b }
         .flatMapLatest { c.birthdays.observeAll() }
         .map { BirthdayMath.upcoming(it, LocalDate.now()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
@@ -85,6 +89,12 @@ class BirthdaysViewModel(private val c: AppContainer) : ViewModel() {
     fun reload() {
         refresh.value++
         c.requestReschedule()
+    }
+
+    /** Alles neu laden – Herunterziehen in der Geburtstagsliste. */
+    fun refreshAll() {
+        refresh.value++
+        c.refresher.refreshLater(userInitiated = true)
     }
 
     fun save(entity: BirthdayEntity) {
@@ -108,6 +118,7 @@ fun BirthdaysScreen(modifier: Modifier = Modifier) {
     val vm = appViewModel { BirthdaysViewModel(it) }
     val upcoming by vm.upcoming.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
+    val refreshing by vm.refreshing.collectAsStateWithLifecycle()
     var hasContacts by remember { mutableStateOf(vm.hasContacts()) }
     var editing by remember { mutableStateOf<BirthdayEntity?>(null) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
@@ -131,8 +142,13 @@ fun BirthdaysScreen(modifier: Modifier = Modifier) {
             }
         },
     ) { padding ->
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = vm::refreshAll,
+            modifier = Modifier.padding(padding).fillMaxSize(),
+        ) {
         LazyColumn(
-            Modifier.padding(padding).fillMaxSize(),
+            Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
@@ -180,6 +196,7 @@ fun BirthdaysScreen(modifier: Modifier = Modifier) {
                     }
                 }
             }
+        }
         }
     }
 

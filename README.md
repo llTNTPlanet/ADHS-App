@@ -180,6 +180,11 @@ Der GitHub-Token für Updates liegt im privaten App-Speicher und ist von Geräte
 - Erinnerungen: genau ein exakter Alarm auf die jeweils nächste Erinnerung (`AlarmManager`), Benachrichtigung mit
   Full-Screen-Intent, Vollbild-Activity über dem Sperrbildschirm; Neuplanung nach Neustart, Zeitänderung,
   Kalender-/Kontaktänderungen und alle 30 Minuten als Sicherheitsnetz
+- Daten-Aktualisierung (`DataRefresher`): Google Health, Google Tasks, Termine, Geburtstage und die Erinnerungsplanung
+  werden zentral neu geladen – alle 5 Minuten im Hintergrund (`RefreshWorker`, reiht sich selbst neu ein, weil
+  WorkManager periodische Jobs erst ab 15 Minuten erlaubt), beim Öffnen der App und danach alle 5 Minuten, solange sie
+  sichtbar ist, sowie manuell durch Herunterziehen auf jedem Bildschirm (Pull-to-Refresh). Im Energiesparmodus (Doze)
+  fasst Android Hintergrundläufe zusammen, dann vergehen auch mal 15 Minuten oder mehr.
 
 ```
 app/src/main/java/de/lltntplanet/adhsapp/
