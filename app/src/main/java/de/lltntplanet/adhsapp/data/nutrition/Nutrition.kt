@@ -4,6 +4,7 @@ import de.lltntplanet.adhsapp.data.db.FoodDao
 import de.lltntplanet.adhsapp.data.db.FoodEntryEntity
 import de.lltntplanet.adhsapp.data.db.MealType
 import de.lltntplanet.adhsapp.data.settings.AppSettings
+import de.lltntplanet.adhsapp.data.settings.SettingsRepository
 import de.lltntplanet.adhsapp.data.settings.Sex
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
@@ -77,12 +78,34 @@ object NutritionMath {
     }
 }
 
-class NutritionRepository(private val dao: FoodDao) {
+class NutritionRepository(
+    private val dao: FoodDao,
+    private val healthConnect: HealthConnectNutrition? = null,
+    private val settings: SettingsRepository? = null,
+) {
     fun observeDay(date: LocalDate): Flow<List<FoodEntryEntity>> = dao.observeDay(date.toEpochDay())
 
     suspend fun recent(limit: Int = 12): List<FoodEntryEntity> = dao.recent(limit)
 
-    suspend fun save(entry: FoodEntryEntity): Long = dao.upsert(entry)
+    private suspend fun exportEnabled(): Boolean =
+        healthConnect != null && settings?.current()?.healthConnectExport == true && healthConnect.available
 
-    suspend fun delete(entry: FoodEntryEntity) = dao.delete(entry)
+    /** Speichert lokal und – falls eingeschaltet – auch in Health Connect (Änderung ersetzt den alten Eintrag). */
+    suspend fun save(entry: FoodEntryEntity): Long {
+        val id = dao.upsert(entry).let { if (entry.id != 0L) entry.id else it }
+        if (exportEnabled()) healthConnect!!.write(entry.copy(id = id))
+        return id
+    }
+
+    suspend fun delete(entry: FoodEntryEntity) {
+        dao.delete(entry)
+        if (exportEnabled()) healthConnect!!.delete(entry.id)
+    }
+
+    /** Alle Einträge eines Tages (neu) nach Health Connect schreiben, z. B. nach dem Einschalten. */
+    suspend fun exportDay(date: LocalDate): Int {
+        if (!exportEnabled()) return 0
+        val entries = dao.forDay(date.toEpochDay())
+        return entries.count { healthConnect!!.write(it) }
+    }
 }

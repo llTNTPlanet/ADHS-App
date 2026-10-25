@@ -56,16 +56,16 @@ class FoodVisionClient(
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
         .build(),
-) {
-    val configured: Boolean get() = !apiKey().isNullOrBlank()
+) : FoodRecognizer {
+    override val configured: Boolean get() = !apiKey().isNullOrBlank()
 
     /**
      * [jpeg] ist das (verkleinerte) Foto, [hint] ein optionaler Freitext des Nutzers
      * ("halbe Portion", "Packung ist 400 g").
      */
-    suspend fun analyze(jpeg: ByteArray, hint: String? = null): FoodRecognition {
+    override suspend fun analyze(jpeg: ByteArray, hint: String?): FoodRecognition {
         val key = apiKey()?.takeIf { it.isNotBlank() }
-            ?: throw FoodVisionException(0, "Kein API-Schlüssel hinterlegt. Trage ihn in den Einstellungen unter „Ernährung“ ein.")
+            ?: throw FoodVisionException(0, "Kein Claude-API-Schlüssel hinterlegt. Trage ihn in den Einstellungen unter „Ernährung“ ein.")
         val body = buildRequest(java.util.Base64.getEncoder().encodeToString(jpeg), hint)
         val (code, text) = withContext(Dispatchers.IO) {
             val request = Request.Builder()
@@ -87,18 +87,6 @@ class FoodVisionClient(
         const val API_VERSION = "2026-10-21"
         const val FALLBACK_BETA = "server-side-fallback-2026-07-01"
         private val JSON = "application/json".toMediaType()
-
-        private const val SYSTEM_PROMPT =
-            "Du bist eine Ernährungsassistenz in einer deutschen App. Der Nutzer fotografiert sein Essen: " +
-                "einen Teller, eine Schüssel, einen Snack oder die Verpackung eines Produkts (Vorder- oder Rückseite mit Nährwerttabelle). " +
-                "Erkenne jedes Lebensmittel bzw. Produkt auf dem Bild und schätze pro Eintrag die gegessene Menge und die Kilokalorien. " +
-                "Bei Verpackungen: Lies Produktname und Nährwerte von der Packung; ist die Nährwerttabelle sichtbar, rechne mit ihr; " +
-                "nimm als Menge eine typische Portion bzw. den Packungsinhalt, wenn er ablesbar ist, und sag das in note. " +
-                "Bei Tellern: Schätze die Portionsgröße anhand von Teller, Besteck und Händen. " +
-                "Fasse Beilagen als eigene Einträge zusammen (z. B. „Reis“, „Hähnchenbrust“, „Soße“). " +
-                "Namen kurz und deutsch, kcal als ganze Zahl, amount wie „250 g“ oder „1 Stück“. " +
-                "mealGuess ist eine Vermutung zur Mahlzeit aus Art und Uhrzeit, sonst null. " +
-                "Ist kein Essen erkennbar, gib eine leere items-Liste und erkläre es kurz in note."
 
         internal fun buildRequest(imageBase64: String, hint: String?): String {
             val userText = buildString {
@@ -138,7 +126,7 @@ class FoodVisionClient(
                 put("model", MODEL)
                 put("max_tokens", 4000)
                 put("fallbacks", "default")
-                put("system", SYSTEM_PROMPT)
+                put("system", FoodVisionPrompt.SYSTEM)
                 putJsonObject("output_config") {
                     putJsonObject("format") {
                         put("type", "json_schema")
@@ -214,4 +202,19 @@ class FoodVisionClient(
             }
         }
     }
+}
+
+/** Gemeinsame Anweisung für alle Erkenner. */
+object FoodVisionPrompt {
+    const val SYSTEM =
+        "Du bist eine Ernährungsassistenz in einer deutschen App. Der Nutzer fotografiert sein Essen: " +
+                "einen Teller, eine Schüssel, einen Snack oder die Verpackung eines Produkts (Vorder- oder Rückseite mit Nährwerttabelle). " +
+                "Erkenne jedes Lebensmittel bzw. Produkt auf dem Bild und schätze pro Eintrag die gegessene Menge und die Kilokalorien. " +
+                "Bei Verpackungen: Lies Produktname und Nährwerte von der Packung; ist die Nährwerttabelle sichtbar, rechne mit ihr; " +
+                "nimm als Menge eine typische Portion bzw. den Packungsinhalt, wenn er ablesbar ist, und sag das in note. " +
+                "Bei Tellern: Schätze die Portionsgröße anhand von Teller, Besteck und Händen. " +
+                "Fasse Beilagen als eigene Einträge zusammen (z. B. „Reis“, „Hähnchenbrust“, „Soße“). " +
+                "Namen kurz und deutsch, kcal als ganze Zahl, amount wie „250 g“ oder „1 Stück“. " +
+                "mealGuess ist eine Vermutung zur Mahlzeit aus Art und Uhrzeit, sonst null. " +
+                "Ist kein Essen erkennbar, gib eine leere items-Liste und erkläre es kurz in note."
 }

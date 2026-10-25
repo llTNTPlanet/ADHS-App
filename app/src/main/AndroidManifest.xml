@@ -7,6 +7,13 @@
     <!-- Fotos von Mahlzeiten (Kamera-App wird nur gestartet, kein direkter Kamerazugriff nötig) -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
+    <!-- Mahlzeiten in Health Connect eintragen (Google Health liest sie von dort) -->
+    <uses-permission android:name="android.permission.health.WRITE_NUTRITION" />
+
+    <queries>
+        <package android:name="com.google.android.apps.healthdata" />
+    </queries>
+
     <!-- Google Kalender (über den Kalender-Speicher des Geräts) -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
@@ -43,6 +50,26 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.AdhsApp"
         tools:targetApi="31">
+
+        <!-- Health Connect: Erklärung, wofür die App Ernährungsdaten schreibt (bis Android 13 …) -->
+        <activity
+            android:name=".ui.nutrition.HealthConnectRationaleActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
+        </activity>
+        <!-- … und ab Android 14 -->
+        <activity-alias
+            android:name="ViewPermissionUsageActivity"
+            android:exported="true"
+            android:targetActivity=".ui.nutrition.HealthConnectRationaleActivity"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
 
         <!-- Kamera-Fotos von Mahlzeiten an die Kamera-App übergeben -->
         <provider

@@ -89,6 +89,9 @@ interface FoodDao {
     @Query("SELECT * FROM food_entries WHERE epochDay = :epochDay ORDER BY createdAt")
     fun observeDay(epochDay: Long): Flow<List<FoodEntryEntity>>
 
+    @Query("SELECT * FROM food_entries WHERE epochDay = :epochDay ORDER BY createdAt")
+    suspend fun forDay(epochDay: Long): List<FoodEntryEntity>
+
     @Query("SELECT * FROM food_entries WHERE epochDay BETWEEN :fromDay AND :toDay ORDER BY epochDay, createdAt")
     fun observeRange(fromDay: Long, toDay: Long): Flow<List<FoodEntryEntity>>
 
