@@ -67,7 +67,7 @@ class AppContainer(app: Application) {
     val settings = SettingsRepository(app)
     val db = AppDatabase.create(app)
     val calendar = CalendarRepository(app)
-    val birthdays = BirthdayRepository(app, db.birthdayDao())
+    val birthdays = BirthdayRepository(app, db.birthdayDao(), calendar, settings)
     val tasks = TaskRepository(db.taskDao()) { requestReschedule() }
 
     val auth = GoogleAuth(app, settings)

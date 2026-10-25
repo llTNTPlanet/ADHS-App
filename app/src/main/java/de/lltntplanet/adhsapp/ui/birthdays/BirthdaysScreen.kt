@@ -177,8 +177,13 @@ fun BirthdaysScreen(modifier: Modifier = Modifier) {
                 } else {
                     "Geburtstags-Erinnerungen sind ausgeschaltet (Einstellungen)."
                 }
+                val sourceText = if (settings.birthdaysFromCalendar) {
+                    "Geburtstage kommen automatisch aus Google Kalender und Google Kontakte."
+                } else {
+                    "Geburtstage aus Google Kalender sind ausgeschaltet (Einstellungen)."
+                }
                 Text(
-                    reminderText,
+                    "$sourceText\n$reminderText",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 8.dp),
@@ -246,7 +251,11 @@ fun BirthdayRow(up: UpcomingBirthday, onClick: () -> Unit) {
             Text(b.name, style = MaterialTheme.typography.bodyLarge, fontWeight = if (soon) FontWeight.Bold else FontWeight.Normal)
             val age = up.age?.let { " · wird $it" }.orEmpty()
             Text(
-                "${TimeFormat.dayMonth(up.date)}$age" + if (b.source == BirthdaySource.CONTACT) " · Kontakt" else "",
+                "${TimeFormat.dayMonth(up.date)}$age" + when (b.source) {
+                    BirthdaySource.CONTACT -> " · Kontakt"
+                    BirthdaySource.CALENDAR -> " · Google Kalender"
+                    BirthdaySource.MANUAL -> ""
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

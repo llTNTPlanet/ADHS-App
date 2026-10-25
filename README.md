@@ -41,7 +41,10 @@ Weitere Bilder: [Monat](docs/screenshots/06-kalender-monat.png), [3 Tage](docs/s
 - Optionaler Abgleich mit **Google Tasks**
 
 **Geburtstage**
-- Automatisch aus deinen Google-Kontakten, zusätzlich eigene Einträge, Alter wird angezeigt
+- Automatisch aus deinem **Google Kalender** (der Geburtstagskalender sowie jährliche Termine wie „Annas Geburtstag“
+  oder „Geburtstag von Ben (1990)“) und aus deinen **Google-Kontakten**, zusätzlich eigene Einträge; Alter wird
+  angezeigt, Dubletten werden zusammengeführt (Kontakt vor Kalender vor eigenem Eintrag)
+- Erinnert wird pro Geburtstag nur einmal – der Geburtstagskalender löst keine zusätzliche Terminerinnerung aus
 
 **App-Updates direkt aus GitHub**
 - Neue Versionen erscheinen nach jedem Merge auf `main` automatisch als GitHub-Release

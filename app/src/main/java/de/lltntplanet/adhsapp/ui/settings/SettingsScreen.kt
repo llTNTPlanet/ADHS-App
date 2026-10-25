@@ -258,6 +258,11 @@ fun SettingsScreen(onBack: () -> Unit, onOpenSetup: () -> Unit) {
             // Geburtstage
             Section("Geburtstage")
             SwitchSetting(
+                "Geburtstage aus Google Kalender",
+                "Geburtstagskalender und jährliche Termine wie „Annas Geburtstag“ automatisch übernehmen",
+                s.birthdaysFromCalendar,
+            ) { v -> vm.update { it.copy(birthdaysFromCalendar = v) } }
+            SwitchSetting(
                 "An Geburtstage erinnern",
                 "um ${TimeFormat.minutesOfDay(s.birthdayReminderMinutes)} Uhr",
                 s.birthdayReminders,
