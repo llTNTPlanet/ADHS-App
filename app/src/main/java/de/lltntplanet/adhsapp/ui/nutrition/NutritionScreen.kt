@@ -90,6 +90,7 @@ import de.lltntplanet.adhsapp.data.db.FoodEntryEntity
 import de.lltntplanet.adhsapp.data.db.MealType
 import de.lltntplanet.adhsapp.data.nutrition.CalorieBalance
 import de.lltntplanet.adhsapp.data.nutrition.FoodRecognition
+import de.lltntplanet.adhsapp.data.nutrition.FoodVisionProvider
 import de.lltntplanet.adhsapp.data.nutrition.PhotoScaler
 import de.lltntplanet.adhsapp.data.nutrition.RecognizedFood
 import de.lltntplanet.adhsapp.data.nutrition.NutritionMath
@@ -106,6 +107,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -171,8 +173,14 @@ class NutritionViewModel(private val c: AppContainer) : ViewModel() {
         viewModelScope.launch { c.nutrition.delete(entry) }
     }
 
-    val visionConfigured: StateFlow<Boolean> = c.secrets.anthropicApiKey
-        .combine(MutableStateFlow(Unit)) { k, _ -> !k.isNullOrBlank() }
+    /** Welcher Erkenner ist eingestellt und hat er einen Schlüssel? */
+    val visionProvider: StateFlow<FoodVisionProvider> = settings.map { it.foodVisionProvider }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, FoodVisionProvider.GEMINI)
+    val visionConfigured: StateFlow<Boolean> = combine(
+        settings.map { it.foodVisionProvider },
+        c.secrets.geminiApiKey,
+        c.secrets.anthropicApiKey,
+    ) { p, gemini, claude -> !(if (p == FoodVisionProvider.CLAUDE) claude else gemini).isNullOrBlank() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, c.foodVision.configured)
 
     private val _analysis = MutableStateFlow<PhotoAnalysis>(PhotoAnalysis.Idle)
@@ -181,7 +189,10 @@ class NutritionViewModel(private val c: AppContainer) : ViewModel() {
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val messages: SharedFlow<String> = _messages
 
-    fun setApiKey(key: String) = c.secrets.setAnthropicApiKey(key)
+    fun setApiKey(provider: FoodVisionProvider, key: String) = when (provider) {
+        FoodVisionProvider.GEMINI -> c.secrets.setGeminiApiKey(key)
+        FoodVisionProvider.CLAUDE -> c.secrets.setAnthropicApiKey(key)
+    }
 
     /** Foto verkleinern, an die Erkennung schicken und das Ergebnis zur Prüfung anzeigen. */
     fun analyzePhoto(uri: Uri, deleteAfter: Boolean) {
@@ -267,6 +278,7 @@ fun NutritionScreen(modifier: Modifier = Modifier) {
     var showPhotoSource by remember { mutableStateOf(false) }
     var showApiKey by remember { mutableStateOf(false) }
     val visionConfigured by vm.visionConfigured.collectAsStateWithLifecycle()
+    val visionProvider by vm.visionProvider.collectAsStateWithLifecycle()
     val analysis by vm.analysis.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -416,9 +428,10 @@ fun NutritionScreen(modifier: Modifier = Modifier) {
     }
     if (showApiKey) {
         ApiKeyDialog(
+            provider = visionProvider,
             onDismiss = { showApiKey = false },
             onSave = { key ->
-                vm.setApiKey(key)
+                vm.setApiKey(visionProvider, key)
                 showApiKey = false
                 showPhotoSource = true
             },
@@ -947,7 +960,7 @@ private fun RecognitionDialog(
 
 /** Einmalig den API-Schlüssel für die Foto-Erkennung eintragen. */
 @Composable
-fun ApiKeyDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
+fun ApiKeyDialog(provider: FoodVisionProvider, onDismiss: () -> Unit, onSave: (String) -> Unit) {
     val context = LocalContext.current
     var key by remember { mutableStateOf("") }
     AlertDialog(
@@ -956,20 +969,26 @@ fun ApiKeyDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    "Die Erkennung läuft über die Claude-API von Anthropic. Dafür brauchst du einmalig einen eigenen API-Schlüssel " +
-                        "(mit etwas Guthaben; ein Foto kostet ungefähr einen Cent).",
+                    when (provider) {
+                        FoodVisionProvider.GEMINI ->
+                            "Die Erkennung läuft kostenlos über die Gemini-API von Google. Du brauchst einmalig einen eigenen " +
+                                "API-Schlüssel aus Google AI Studio – ein Google-Konto genügt, Zahlungsdaten sind nicht nötig."
+                        FoodVisionProvider.CLAUDE ->
+                            "Die Erkennung läuft über die Claude-API von Anthropic. Dafür brauchst du einmalig einen eigenen API-Schlüssel " +
+                                "(mit etwas Guthaben; ein Foto kostet ungefähr einen Cent)."
+                    },
                 )
                 OutlinedTextField(
                     value = key,
                     onValueChange = { key = it },
-                    placeholder = { Text("sk-ant-…") },
+                    placeholder = { Text(provider.keyPlaceholder) },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                TextButton(onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, ApiKeyUrl.toUri())) } }) {
-                    Text("Schlüssel bei Anthropic erstellen")
+                TextButton(onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, provider.keyUrl.toUri())) } }) {
+                    Text(if (provider == FoodVisionProvider.GEMINI) "Kostenlosen Schlüssel bei Google erstellen" else "Schlüssel bei Anthropic erstellen")
                 }
                 Text(
                     "Der Schlüssel bleibt auf deinem Handy und wird nicht gesichert. Fotos werden nur für die Erkennung übertragen und nicht gespeichert.",
@@ -983,4 +1002,3 @@ fun ApiKeyDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
     )
 }
 
-const val ApiKeyUrl = "https://platform.claude.com/settings/keys"

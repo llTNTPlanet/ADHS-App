@@ -34,9 +34,20 @@ class SecretStore(context: Context) {
         _anthropicApiKey.value = value
     }
 
+    private val _geminiApiKey = MutableStateFlow(prefs.getString(KEY_GEMINI, null))
+    /** API-Schlüssel für die kostenlose Foto-Erkennung über Gemini (Google AI Studio). */
+    val geminiApiKey: StateFlow<String?> = _geminiApiKey.asStateFlow()
+
+    fun setGeminiApiKey(key: String?) {
+        val value = key?.trim()?.takeIf { it.isNotEmpty() }
+        prefs.edit { if (value == null) remove(KEY_GEMINI) else putString(KEY_GEMINI, value) }
+        _geminiApiKey.value = value
+    }
+
     companion object {
         const val FILE = "secrets"
         private const val KEY_GITHUB_TOKEN = "github_token"
         private const val KEY_ANTHROPIC = "anthropic_api_key"
+        private const val KEY_GEMINI = "gemini_api_key"
     }
 }

@@ -1,0 +1,94 @@
+package de.lltntplanet.adhsapp.data
+
+import de.lltntplanet.adhsapp.data.db.MealType
+import de.lltntplanet.adhsapp.data.nutrition.FoodVisionException
+import de.lltntplanet.adhsapp.data.nutrition.GeminiFoodVisionClient
+import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
+import org.junit.Before
+import org.junit.Test
+
+class GeminiFoodVisionClientTest {
+    private lateinit var server: MockWebServer
+
+    @Before
+    fun setUp() {
+        server = MockWebServer().also { it.start() }
+    }
+
+    @After
+    fun tearDown() = server.shutdown()
+
+    private fun client(key: String? = "AIza-test") = GeminiFoodVisionClient({ key }, server.url("/v1beta").toString())
+
+    private val answer = """{"items":[{"name":"Müsli","amount":"80 g","kcal":300,"confidence":"hoch"}],"mealGuess":"BREAKFAST","note":"Packung gelesen"}"""
+
+    private fun ok(text: String) = MockResponse().setBody(
+        """{"candidates":[{"content":{"parts":[{"text":${Json.encodeToString(kotlinx.serialization.serializer<String>(), text)}}],"role":"model"},"finishReason":"STOP"}]}""",
+    )
+
+    @Test
+    fun sendsInlineImageWithSchemaAndParses() = runTest {
+        server.enqueue(ok(answer))
+        val result = client().analyze(byteArrayOf(1, 2, 3))
+        assertEquals("Müsli", result.items.single().name)
+        assertEquals(300, result.totalKcal)
+        assertEquals(MealType.BREAKFAST, result.mealGuess)
+
+        val request = server.takeRequest()
+        assertEquals("/v1beta/models/${GeminiFoodVisionClient.MODELS[0]}:generateContent", request.path)
+        assertEquals("AIza-test", request.getHeader("x-goog-api-key"))
+        val body = Json.parseToJsonElement(request.body.readUtf8()).jsonObject
+        val parts = body["contents"]!!.jsonArray[0].jsonObject["parts"]!!.jsonArray
+        val inline = parts[1].jsonObject["inline_data"]!!.jsonObject
+        assertEquals("image/jpeg", inline["mime_type"]!!.jsonPrimitive.content)
+        assertEquals("AQID", inline["data"]!!.jsonPrimitive.content)
+        val gen = body["generationConfig"]!!.jsonObject
+        assertEquals("application/json", gen["responseMimeType"]!!.jsonPrimitive.content)
+        assertEquals("OBJECT", gen["responseSchema"]!!.jsonObject["type"]!!.jsonPrimitive.content)
+        assertTrue(body["system_instruction"]!!.jsonObject["parts"]!!.jsonArray[0].jsonObject["text"]!!.jsonPrimitive.content.contains("Ernährungsassistenz"))
+    }
+
+    @Test
+    fun fallsBackToNextModelOn404() = runTest {
+        server.enqueue(MockResponse().setResponseCode(404).setBody("""{"error":{"message":"model not found"}}"""))
+        server.enqueue(ok(answer))
+        client().analyze(byteArrayOf(1))
+        assertTrue(server.takeRequest().path!!.contains(GeminiFoodVisionClient.MODELS[0]))
+        assertTrue(server.takeRequest().path!!.contains(GeminiFoodVisionClient.MODELS[1]))
+    }
+
+    @Test
+    fun errorsAreReadable() = runTest {
+        server.enqueue(MockResponse().setResponseCode(429).setBody("{}"))
+        try {
+            client().analyze(byteArrayOf(1))
+            fail()
+        } catch (e: FoodVisionException) {
+            assertEquals(429, e.code)
+            assertTrue(e.message!!.contains("Kontingent"))
+        }
+        server.enqueue(MockResponse().setBody("""{"candidates":[],"promptFeedback":{"blockReason":"SAFETY"}}"""))
+        try {
+            client().analyze(byteArrayOf(1))
+            fail()
+        } catch (e: FoodVisionException) {
+            assertTrue(e.message!!.contains("SAFETY"))
+        }
+        try {
+            client(key = null).analyze(byteArrayOf(1))
+            fail()
+        } catch (e: FoodVisionException) {
+            assertEquals(0, e.code)
+        }
+    }
+}
