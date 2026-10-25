@@ -34,6 +34,8 @@ data class AppSettings(
     val birthdayReminderMinutes: Int = 9 * 60,
     /** 0 = am Tag selbst, 1 = einen Tag vorher usw. */
     val birthdayDaysBefore: Set<Int> = setOf(0, 1),
+    /** Geburtstage automatisch aus dem Google Kalender übernehmen. */
+    val birthdaysFromCalendar: Boolean = true,
     /** Uhrzeit für Aufgaben, die nur ein Datum haben. */
     val taskDefaultMinutes: Int = 9 * 60,
     /** Kalender, für die keine Erinnerungen erzeugt werden. */
@@ -78,6 +80,7 @@ class SettingsRepository(private val context: Context) {
         val birthdayReminders = booleanPreferencesKey("birthday_reminders")
         val birthdayReminderMinutes = intPreferencesKey("birthday_reminder_minutes")
         val birthdayDaysBefore = stringSetPreferencesKey("birthday_days_before")
+        val birthdaysFromCalendar = booleanPreferencesKey("birthdays_from_calendar")
         val taskDefaultMinutes = intPreferencesKey("task_default_minutes")
         val excludedReminderCalendars = stringSetPreferencesKey("excluded_reminder_calendars")
         val hiddenCalendars = stringSetPreferencesKey("hidden_calendars")
@@ -118,6 +121,7 @@ class SettingsRepository(private val context: Context) {
             birthdayReminderMinutes = this[Keys.birthdayReminderMinutes] ?: d.birthdayReminderMinutes,
             birthdayDaysBefore = this[Keys.birthdayDaysBefore]?.mapNotNull { it.toIntOrNull() }?.toSet()
                 ?: d.birthdayDaysBefore,
+            birthdaysFromCalendar = this[Keys.birthdaysFromCalendar] ?: d.birthdaysFromCalendar,
             taskDefaultMinutes = this[Keys.taskDefaultMinutes] ?: d.taskDefaultMinutes,
             excludedReminderCalendars = this[Keys.excludedReminderCalendars]?.mapNotNull { it.toLongOrNull() }
                 ?.toSet() ?: d.excludedReminderCalendars,
@@ -161,6 +165,7 @@ class SettingsRepository(private val context: Context) {
         this[Keys.birthdayReminders] = s.birthdayReminders
         this[Keys.birthdayReminderMinutes] = s.birthdayReminderMinutes
         this[Keys.birthdayDaysBefore] = s.birthdayDaysBefore.map { it.toString() }.toSet()
+        this[Keys.birthdaysFromCalendar] = s.birthdaysFromCalendar
         this[Keys.taskDefaultMinutes] = s.taskDefaultMinutes
         this[Keys.excludedReminderCalendars] = s.excludedReminderCalendars.map { it.toString() }.toSet()
         this[Keys.hiddenCalendars] = s.hiddenCalendars.map { it.toString() }.toSet()

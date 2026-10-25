@@ -46,8 +46,8 @@ class ReminderEngine(
         if (calendar.hasReadPermission()) {
             val calendars = calendar.calendars()
             val excluded = s.excludedReminderCalendars.toMutableSet()
-            if (s.birthdayReminders && birthdays.hasContactsPermission()) {
-                // Geburtstage kommen schon aus den Kontakten.
+            if (s.birthdayReminders && (s.birthdaysFromCalendar || birthdays.hasContactsPermission())) {
+                // Geburtstage kommen schon aus Kontakten bzw. dem Geburtstagskalender – nicht doppelt erinnern.
                 excluded += calendars.filter { it.isBirthdayCalendar }.map { it.id }
             }
             val instances = calendar.instancesBetween(from - DAY, to + ReminderPlanner.MAX_OFFSET_MINUTES * 60_000L + DAY)
