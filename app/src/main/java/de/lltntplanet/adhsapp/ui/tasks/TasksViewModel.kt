@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -28,7 +28,9 @@ class TasksViewModel(private val c: AppContainer) : ViewModel() {
         c.settings.settings.stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
 
     private val _syncing = MutableStateFlow(false)
-    val syncing: StateFlow<Boolean> = _syncing.asStateFlow()
+    /** Eigener Abgleich oder die zentrale Aktualisierung (alle 5 Minuten / beim Öffnen / Herunterziehen). */
+    val syncing: StateFlow<Boolean> = combine(_syncing, c.refresher.refreshing) { a, b -> a || b }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val messages: SharedFlow<String> = _messages
@@ -79,6 +81,11 @@ class TasksViewModel(private val c: AppContainer) : ViewModel() {
             _messages.tryEmit("Auf morgen verschoben – das ist völlig okay.")
             scheduleSync()
         }
+    }
+
+    /** Alles neu laden – Herunterziehen auf dem Aufgaben-Bildschirm. */
+    fun refreshAll() {
+        c.refresher.refreshLater(userInitiated = true)
     }
 
     fun sync(userInitiated: Boolean = true) {

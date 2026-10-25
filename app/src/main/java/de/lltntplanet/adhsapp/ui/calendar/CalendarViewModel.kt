@@ -29,7 +29,10 @@ class CalendarViewModel(private val container: AppContainer) : ViewModel() {
         container.settings.settings.stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
 
     private val refreshTick = MutableStateFlow(0)
-    private val changes = combine(repo.changes(), refreshTick) { _, _ -> }
+    private val changes = combine(repo.changes(), refreshTick, container.refresher.changes) { _, _, _ -> }
+
+    /** Läuft gerade die zentrale Aktualisierung? */
+    val refreshing: StateFlow<Boolean> = container.refresher.refreshing
 
     /** Zählt Änderungen im Kalender-Speicher; Ansichten laden bei jeder Änderung neu. */
     val version: StateFlow<Int> = changes
@@ -53,6 +56,12 @@ class CalendarViewModel(private val container: AppContainer) : ViewModel() {
     /** Neu laden, z. B. nachdem die Kalenderberechtigung erteilt wurde. */
     fun refresh() {
         refreshTick.value++
+    }
+
+    /** Alles neu laden – Herunterziehen in der Terminliste. */
+    fun refreshAll() {
+        refreshTick.value++
+        container.refresher.refreshLater(userInitiated = true)
     }
 
     suspend fun load(from: LocalDate, toExclusive: LocalDate): List<EventInstance> {

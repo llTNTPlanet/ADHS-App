@@ -34,6 +34,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -71,7 +72,6 @@ fun TasksScreen(modifier: Modifier = Modifier) {
     val today = LocalDate.now()
 
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
-    LaunchedEffect(settings.tasksConnected) { if (settings.tasksConnected) vm.sync(userInitiated = false) }
 
     Scaffold(
         modifier = modifier,
@@ -98,7 +98,12 @@ fun TasksScreen(modifier: Modifier = Modifier) {
     ) { padding ->
         val all = tasks
         val grouped = remember(all, today) { TaskLogic.grouped(all.orEmpty(), today) }
-        LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 96.dp)) {
+        PullToRefreshBox(
+            isRefreshing = syncing,
+            onRefresh = vm::refreshAll,
+            modifier = Modifier.padding(padding).fillMaxSize(),
+        ) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 96.dp)) {
             item {
                 OutlinedTextField(
                     value = quick,
@@ -163,6 +168,7 @@ fun TasksScreen(modifier: Modifier = Modifier) {
                     }
                 }
             }
+        }
         }
     }
 

@@ -2,6 +2,9 @@ package de.lltntplanet.adhsapp
 
 import android.app.Application
 import android.util.Log
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import de.lltntplanet.adhsapp.data.birthdays.BirthdayRepository
 import de.lltntplanet.adhsapp.data.calendar.CalendarRepository
 import de.lltntplanet.adhsapp.data.db.AppDatabase
@@ -14,6 +17,8 @@ import de.lltntplanet.adhsapp.data.google.HealthApi
 import de.lltntplanet.adhsapp.data.health.HealthRepository
 import de.lltntplanet.adhsapp.data.settings.SecretStore
 import de.lltntplanet.adhsapp.data.settings.SettingsRepository
+import de.lltntplanet.adhsapp.data.sync.DataRefresher
+import de.lltntplanet.adhsapp.data.sync.RefreshWorker
 import de.lltntplanet.adhsapp.data.tasks.TaskRepository
 import de.lltntplanet.adhsapp.reminders.CalendarChangeWorker
 import de.lltntplanet.adhsapp.reminders.MaintenanceWorker
@@ -43,7 +48,15 @@ open class AdhsApp : Application() {
         MaintenanceWorker.ensureScheduled(this)
         UpdateWorker.ensureScheduled(this)
         CalendarChangeWorker.enqueue(this)
+        RefreshWorker.ensureScheduled(this)
         container.requestReschedule()
+        // Sichtbar: sofort und dann alle 5 Minuten aktualisieren; im Hintergrund übernimmt der RefreshWorker.
+        ProcessLifecycleOwner.get().lifecycle.addObserver(
+            object : DefaultLifecycleObserver {
+                override fun onStart(owner: LifecycleOwner) = container.refresher.startForegroundLoop()
+                override fun onStop(owner: LifecycleOwner) = container.refresher.stopForegroundLoop()
+            },
+        )
     }
 }
 
@@ -64,6 +77,7 @@ class AppContainer(app: Application) {
 
     val notifier = ReminderNotifier(app)
     val reminderEngine = ReminderEngine(app, calendar, birthdays, db.taskDao(), db.reminderDao(), settings)
+    val refresher = DataRefresher(settings, health, tasksSync, reminderEngine, scope)
 
     val secrets = SecretStore(app)
     val updateNotifier = UpdateNotifier(app)

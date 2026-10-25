@@ -38,6 +38,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -111,9 +112,12 @@ class TodayViewModel(private val c: AppContainer) : ViewModel() {
     val settings: StateFlow<AppSettings> = c.settings.settings.stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
 
     /** Termine von heute und morgen (für "Als Nächstes" auch über Mitternacht hinaus). */
+    /** Läuft gerade eine Aktualisierung (automatisch oder per Herunterziehen)? */
+    val refreshing: StateFlow<Boolean> = c.refresher.refreshing
+
     val events: StateFlow<List<EventInstance>?> = combine(
         c.calendar.changes(),
-        refresh,
+        combine(refresh, c.refresher.changes) { a, b -> a + b },
         now.map { Dates.toLocalDate(it) }.distinctUntilChanged(),
         settings.map { it.hiddenCalendars }.distinctUntilChanged(),
     ) { _, _, today, hidden -> today to hidden }
@@ -125,15 +129,22 @@ class TodayViewModel(private val c: AppContainer) : ViewModel() {
 
     val tasks: StateFlow<List<TaskEntity>> = c.tasks.observeAll().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val birthdays: StateFlow<List<UpcomingBirthday>> = refresh
+    val birthdays: StateFlow<List<UpcomingBirthday>> = combine(refresh, c.refresher.changes) { a, b -> a + b }
         .flatMapLatest { c.birthdays.observeAll() }
         .map { list -> BirthdayMath.upcoming(list, LocalDate.now()).filter { it.daysUntil <= 14 } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val health: StateFlow<HealthSnapshot?> = c.health.snapshot.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    /** Nur die Ansicht neu lesen (Kalender, Kontakte). */
     fun refresh() {
         refresh.value++
+    }
+
+    /** Alles neu laden – Herunterziehen auf dem Heute-Bildschirm. */
+    fun refreshAll() {
+        refresh.value++
+        c.refresher.refreshLater(userInitiated = true)
     }
 
     suspend fun reminders(eventId: Long): List<Int> =
@@ -185,6 +196,7 @@ fun TodayScreen(
     val tasks by vm.tasks.collectAsStateWithLifecycle()
     val birthdays by vm.birthdays.collectAsStateWithLifecycle()
     val health by vm.health.collectAsStateWithLifecycle()
+    val refreshing by vm.refreshing.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     var permissions by remember { mutableStateOf(Permissions.state(context)) }
     var selected by remember { mutableStateOf<EventInstance?>(null) }
@@ -218,8 +230,13 @@ fun TodayScreen(
     ) { padding ->
         val todayEvents = events.orEmpty().filter { it.occursOn(today, zone) }
         val todayTasks = tasks.filter { !it.done && TaskLogic.dueDate(it)?.let { d -> !d.isAfter(today) } == true }
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = vm::refreshAll,
+            modifier = Modifier.padding(padding).fillMaxSize(),
+        ) {
         LazyColumn(
-            Modifier.padding(padding).fillMaxSize(),
+            Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp),
         ) {
             if (permissions.essentialsMissing > 0) {
@@ -290,6 +307,7 @@ fun TodayScreen(
                 item { SectionTitle("Gesundheit", action = { TextButton(onClick = onOpenHealth) { Text("Details") } }) }
                 item { HealthMini(health, settings.stepGoal, today, onOpenHealth) }
             }
+        }
         }
     }
 

@@ -37,6 +37,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -86,8 +87,8 @@ class HealthViewModel(private val c: AppContainer) : ViewModel() {
     val snapshot: StateFlow<HealthSnapshot?> = c.health.snapshot.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val settings: StateFlow<AppSettings> = c.settings.settings.stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
 
-    private val _loading = MutableStateFlow(false)
-    val loading: StateFlow<Boolean> = _loading.asStateFlow()
+    /** Zeigt auch die automatische Aktualisierung (alle 5 Minuten / beim Öffnen) an. */
+    val loading: StateFlow<Boolean> = c.refresher.refreshing
 
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val messages: SharedFlow<String> = _messages
@@ -95,23 +96,26 @@ class HealthViewModel(private val c: AppContainer) : ViewModel() {
     private val _needsReconnect = MutableStateFlow(false)
     val needsReconnect: StateFlow<Boolean> = _needsReconnect.asStateFlow()
 
-    fun refresh() {
-        if (_loading.value) return
+    init {
         viewModelScope.launch {
-            _loading.value = true
-            runCatching { c.health.refresh() }
-                .onSuccess { _needsReconnect.value = false }
-                .onFailure { e ->
+            c.refresher.results.collect { r ->
+                if (!settings.value.healthConnected) return@collect
+                val e = r.healthError
+                if (e == null) {
+                    _needsReconnect.value = false
+                } else {
                     if (e is NotAuthorizedException) _needsReconnect.value = true
-                    _messages.tryEmit(e.message ?: "Gesundheitsdaten konnten nicht geladen werden")
+                    // Hintergrundläufe stören nicht mit Meldungen – nur wenn der Nutzer selbst aktualisiert hat.
+                    if (r.userInitiated) _messages.tryEmit(e.message ?: "Gesundheitsdaten konnten nicht geladen werden")
                 }
-            _loading.value = false
+            }
         }
     }
 
-    fun refreshIfStale() {
-        val last = snapshot.value?.fetchedAt ?: 0L
-        if (settings.value.healthConnected && System.currentTimeMillis() - last > 15 * 60_000L) refresh()
+    /** Manuell aktualisieren (Herunterziehen oder Knopf) – lädt alle Daten, nicht nur Gesundheit. */
+    fun refresh() {
+        if (loading.value) return
+        c.refresher.refreshLater(userInitiated = true)
     }
 
     fun onConnectResult(result: TokenResult) {
@@ -158,7 +162,7 @@ fun HealthScreen(modifier: Modifier = Modifier) {
     val connect = rememberGoogleConnector { _, result -> vm.onConnectResult(result) }
 
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
-    LaunchedEffect(settings.healthConnected) { vm.refreshIfStale() }
+    LaunchedEffect(settings.healthConnected) { if (settings.healthConnected && snapshot == null) vm.refresh() }
 
     Scaffold(
         modifier = modifier,
@@ -178,9 +182,13 @@ fun HealthScreen(modifier: Modifier = Modifier) {
             )
         },
     ) { padding ->
+        PullToRefreshBox(
+            isRefreshing = loading && settings.healthConnected,
+            onRefresh = vm::refresh,
+            modifier = Modifier.padding(padding).fillMaxSize(),
+        ) {
         Column(
             Modifier
-                .padding(padding)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
@@ -231,7 +239,13 @@ fun HealthScreen(modifier: Modifier = Modifier) {
             } else if (settings.healthConnected && loading) {
                 Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             }
+            Text(
+                "Aktualisiert sich automatisch alle 5 Minuten und beim Öffnen. Zum manuellen Aktualisieren herunterziehen.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Spacer(Modifier.height(24.dp))
+        }
         }
     }
 }
