@@ -77,6 +77,13 @@ class ChatFoodEstimateTest {
     }
 
     @Test
+    fun textPromptContainsDescriptionAndFormat() {
+        val p = ChatFoodEstimate.textPrompt("  2 Brötchen, 1 Apfel ")
+        assertTrue(p.contains("„2 Brötchen, 1 Apfel“"))
+        assertTrue(p.contains("NUR mit diesem JSON"))
+    }
+
+    @Test
     fun promptAsksForJsonOnly() {
         assertTrue(ChatFoodEstimate.PROMPT.contains("NUR mit diesem JSON"))
         MealType.entries.forEach { assertTrue(ChatFoodEstimate.PROMPT.contains(it.name)) }

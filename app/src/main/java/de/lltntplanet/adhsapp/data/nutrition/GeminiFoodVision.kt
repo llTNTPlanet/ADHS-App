@@ -22,7 +22,10 @@ import java.util.concurrent.TimeUnit
 /** Gemeinsame Schnittstelle der Foto-Erkenner. */
 interface FoodRecognizer {
     val configured: Boolean
+    /** Foto erkennen; [hint] ist ein optionaler Freitext des Nutzers ("halbe Portion"). */
     suspend fun analyze(jpeg: ByteArray, hint: String? = null): FoodRecognition
+    /** Kalorien aus einer Beschreibung in Worten schätzen ("2 Brötchen mit Käse, 1 Apfel, Milchkaffee"). */
+    suspend fun analyzeText(description: String): FoodRecognition
 }
 
 /**
@@ -39,10 +42,16 @@ class GeminiFoodVisionClient(
 ) : FoodRecognizer {
     override val configured: Boolean get() = !apiKey().isNullOrBlank()
 
-    override suspend fun analyze(jpeg: ByteArray, hint: String?): FoodRecognition {
+    override suspend fun analyze(jpeg: ByteArray, hint: String?): FoodRecognition =
+        request(java.util.Base64.getEncoder().encodeToString(jpeg), FoodVisionPrompt.photoText(hint))
+
+    override suspend fun analyzeText(description: String): FoodRecognition =
+        request(null, FoodVisionPrompt.descriptionText(description))
+
+    private suspend fun request(imageBase64: String?, userText: String): FoodRecognition {
         val key = apiKey()?.takeIf { it.isNotBlank() }
             ?: throw FoodVisionException(0, "Kein Gemini-API-Schlüssel hinterlegt. Trage ihn in den Einstellungen unter „Ernährung“ ein.")
-        val body = buildRequest(java.util.Base64.getEncoder().encodeToString(jpeg), hint)
+        val body = buildRequest(imageBase64, userText)
         var lastError: FoodVisionException? = null
         for (model in MODELS) {
             val (code, text) = withContext(Dispatchers.IO) {
@@ -67,11 +76,8 @@ class GeminiFoodVisionClient(
         val MODELS = listOf("gemini-2.5-flash", "gemini-3.8-flash", "gemini-2.5-flash-lite")
         private val JSON = "application/json".toMediaType()
 
-        internal fun buildRequest(imageBase64: String, hint: String?): String {
-            val userText = buildString {
-                append("Bitte erkenne das Essen auf dem Foto und schätze die Kalorien.")
-                if (!hint.isNullOrBlank()) append(" Hinweis des Nutzers: ").append(hint.trim())
-            }
+        /** [imageBase64] null → reine Textanfrage (Beschreibung des Essens in [userText]). */
+        internal fun buildRequest(imageBase64: String?, userText: String): String {
             val schema = buildJsonObject {
                 put("type", "OBJECT")
                 putJsonObject("properties") {
@@ -110,14 +116,16 @@ class GeminiFoodVisionClient(
                             put("role", "user")
                             putJsonArray("parts") {
                                 add(buildJsonObject { put("text", userText) })
-                                add(
-                                    buildJsonObject {
-                                        putJsonObject("inline_data") {
-                                            put("mime_type", "image/jpeg")
-                                            put("data", imageBase64)
-                                        }
-                                    },
-                                )
+                                if (imageBase64 != null) {
+                                    add(
+                                        buildJsonObject {
+                                            putJsonObject("inline_data") {
+                                                put("mime_type", "image/jpeg")
+                                                put("data", imageBase64)
+                                            }
+                                        },
+                                    )
+                                }
                             }
                         },
                     )
@@ -180,6 +188,10 @@ class FoodVisionRouter(
     override suspend fun analyze(jpeg: ByteArray, hint: String?): FoodRecognition =
         (active ?: throw FoodVisionException(0, "Beim Chat-Weg wird das Foto geteilt und die Antwort eingefügt."))
             .analyze(jpeg, hint)
+
+    override suspend fun analyzeText(description: String): FoodRecognition =
+        (active ?: throw FoodVisionException(0, "Beim Chat-Weg wird die Beschreibung geteilt und die Antwort eingefügt."))
+            .analyzeText(description)
 }
 
 enum class FoodVisionProvider(val label: String, val keyUrl: String, val keyPlaceholder: String) {

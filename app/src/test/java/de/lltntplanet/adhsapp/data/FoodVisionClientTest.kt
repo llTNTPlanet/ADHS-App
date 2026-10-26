@@ -35,6 +35,23 @@ class FoodVisionClientTest {
         {"name":"Brötchen","amount":"1 Stück","kcal":150,"confidence":"hoch"}],"mealGuess":"LUNCH","note":"Portion geschätzt"}"""
 
     @Test
+    fun textDescriptionIsSentWithoutImage() = runTest {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"id":"msg_2","type":"message","role":"assistant","model":"claude-opus-5-5","stop_reason":"end_turn",
+                   "content":[{"type":"text","text":${Json.encodeToString(kotlinx.serialization.serializer<String>(), answer)}}]}""",
+            ),
+        )
+        val result = client().analyzeText("Linsensuppe und ein Brötchen")
+        assertEquals(570, result.totalKcal)
+        val body = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+        val content = body["messages"]!!.jsonArray[0].jsonObject["content"]!!.jsonArray
+        assertEquals(1, content.size)
+        assertEquals("text", content[0].jsonObject["type"]!!.jsonPrimitive.content)
+        assertTrue(content[0].jsonObject["text"]!!.jsonPrimitive.content.contains("Linsensuppe und ein Brötchen"))
+    }
+
+    @Test
     fun sendsImageAndSchemaAndParsesResult() = runTest {
         server.enqueue(
             MockResponse().setBody(

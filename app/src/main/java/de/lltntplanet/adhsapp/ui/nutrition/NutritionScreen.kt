@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
@@ -52,6 +53,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Icon
@@ -270,6 +272,26 @@ class NutritionViewModel(private val c: AppContainer) : ViewModel() {
         }
     }
 
+    /**
+     * Beschreibung in Worten („2 Brötchen mit Käse, 1 Apfel“) schätzen lassen – über die eingestellte API,
+     * beim Chat-Weg als Text an eine Chat-App teilen und auf die eingefügte Antwort warten.
+     */
+    fun describeMeal(description: String) {
+        if (_analysis.value is PhotoAnalysis.Running || description.isBlank()) return
+        if (visionProvider.value == FoodVisionProvider.CHAT) {
+            _analysis.value = PhotoAnalysis.AwaitingChat(null)
+            _shareRequests.tryEmit(ChatShareRequest(null, ChatFoodEstimate.textPrompt(description)))
+            return
+        }
+        _analysis.value = PhotoAnalysis.Running
+        viewModelScope.launch {
+            _analysis.value = runCatching { c.foodVision.analyzeText(description) }.fold(
+                onSuccess = { PhotoAnalysis.Done(it) },
+                onFailure = { PhotoAnalysis.Failed(it.message ?: "Schätzung fehlgeschlagen") },
+            )
+        }
+    }
+
     /** Das zuletzt vorbereitete Foto noch einmal an eine Chat-App teilen. */
     fun shareAgain() {
         val photo = (_analysis.value as? PhotoAnalysis.AwaitingChat)?.photo ?: return
@@ -371,6 +393,7 @@ fun NutritionScreen(modifier: Modifier = Modifier) {
     var editing by remember { mutableStateOf<FoodEntryEntity?>(null) }
     var showProfile by remember { mutableStateOf(false) }
     var showPhotoSource by remember { mutableStateOf(false) }
+    var showDescribe by remember { mutableStateOf(false) }
     var showApiKey by remember { mutableStateOf(false) }
     val visionConfigured by vm.visionConfigured.collectAsStateWithLifecycle()
     val visionProvider by vm.visionProvider.collectAsStateWithLifecycle()
@@ -387,13 +410,18 @@ fun NutritionScreen(modifier: Modifier = Modifier) {
                     ?.setPrimaryClip(ClipData.newPlainText("Kalorien-Frage", request.prompt))
             }
             val send = Intent(Intent.ACTION_SEND).apply {
-                type = "image/jpeg"
-                putExtra(Intent.EXTRA_STREAM, request.photo)
                 putExtra(Intent.EXTRA_TEXT, request.prompt)
-                clipData = ClipData.newUri(context.contentResolver, "Essen", request.photo)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                if (request.photo != null) {
+                    type = "image/jpeg"
+                    putExtra(Intent.EXTRA_STREAM, request.photo)
+                    clipData = ClipData.newUri(context.contentResolver, "Essen", request.photo)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                } else {
+                    type = "text/plain"
+                }
             }
-            runCatching { context.startActivity(Intent.createChooser(send, "Foto an Chat-App schicken")) }
+            val title = if (request.photo != null) "Foto an Chat-App schicken" else "Frage an Chat-App schicken"
+            runCatching { context.startActivity(Intent.createChooser(send, title)) }
                 .onFailure { snackbar.showSnackbar("Keine App zum Teilen gefunden") }
         }
     }
@@ -418,6 +446,9 @@ fun NutritionScreen(modifier: Modifier = Modifier) {
     fun startPhoto() {
         if (visionConfigured) showPhotoSource = true else showApiKey = true
     }
+    fun startDescribe() {
+        if (visionConfigured) showDescribe = true else showApiKey = true
+    }
 
     Scaffold(
         modifier = modifier,
@@ -432,6 +463,11 @@ fun NutritionScreen(modifier: Modifier = Modifier) {
         },
         floatingActionButton = {
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                SmallFloatingActionButton(
+                    onClick = { startDescribe() },
+                    shape = RoundedCornerShape(12.dp),
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                ) { Icon(Icons.AutoMirrored.Filled.Chat, "Essen beschreiben und schätzen lassen") }
                 SmallFloatingActionButton(
                     onClick = { startPhoto() },
                     shape = RoundedCornerShape(12.dp),
@@ -488,7 +524,7 @@ fun NutritionScreen(modifier: Modifier = Modifier) {
                             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                                 CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
                                 Spacer(Modifier.width(12.dp))
-                                Text("Foto wird erkannt … das dauert ein paar Sekunden.")
+                                Text("Kalorien werden geschätzt … das dauert ein paar Sekunden.")
                             }
                         }
                     }
@@ -539,6 +575,13 @@ fun NutritionScreen(modifier: Modifier = Modifier) {
                 pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
             },
             onPasteAnswer = { showPhotoSource = false; vm.openChatPaste() },
+        )
+    }
+    if (showDescribe) {
+        DescribeMealDialog(
+            chat = visionProvider == FoodVisionProvider.CHAT,
+            onDismiss = { showDescribe = false },
+            onEstimate = { text -> showDescribe = false; vm.describeMeal(text) },
         )
     }
     if (showApiKey) {
@@ -978,8 +1021,8 @@ sealed interface PhotoAnalysis {
     data class Failed(val message: String, val retryChat: Boolean = false, val photo: Uri? = null) : PhotoAnalysis
 }
 
-/** Foto und Frage für das Teilen-Menü. */
-data class ChatShareRequest(val photo: Uri, val prompt: String)
+/** Foto (oder nur Text) und Frage für das Teilen-Menü. */
+data class ChatShareRequest(val photo: Uri?, val prompt: String)
 
 /** Dialog: Foto aufnehmen oder aus der Galerie wählen. */
 @Composable
@@ -1109,6 +1152,49 @@ private fun RecognitionDialog(
     )
 }
 
+/** Essen in Worten beschreiben und die Kalorien schätzen lassen. */
+@Composable
+private fun DescribeMealDialog(chat: Boolean, onDismiss: () -> Unit, onEstimate: (String) -> Unit) {
+    var text by remember { mutableStateOf("") }
+    val examples = listOf("2 Brötchen mit Butter und Käse", "1 Apfel", "Milchkaffee", "Döner mit allem", "1 Portion Spaghetti Bolognese")
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Was hast du gegessen?") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    if (chat) {
+                        "Schreib einfach auf, was du gegessen hast – mit Mengen, wenn du sie weißt. Die Frage geht an eine Chat-App " +
+                            "deiner Wahl; deren Antwort fügst du danach ein oder teilst sie zurück an die ADHS App."
+                    } else {
+                        "Schreib einfach auf, was du gegessen hast – mit Mengen, wenn du sie weißt. Die Kalorien werden geschätzt " +
+                            "und du kannst alles vor dem Eintragen anpassen."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    placeholder = { Text("z. B. 2 Brötchen mit Butter und Käse, 1 Apfel, Milchkaffee") },
+                    minLines = 3,
+                    maxLines = 8,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    examples.forEach { e ->
+                        SuggestionChip(
+                            onClick = { text = if (text.isBlank()) e else text.trimEnd().trimEnd(',') + ", " + e },
+                            label = { Text(e, style = MaterialTheme.typography.labelSmall) },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(enabled = text.isNotBlank(), onClick = { onEstimate(text) }) { Text(if (chat) "An Chat-App schicken" else "Schätzen") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } },
+    )
+}
+
 /** Chat-Weg: Antwort der Chat-App einfügen und auswerten lassen. */
 @Composable
 private fun ChatAnswerDialog(hasPhoto: Boolean, onDismiss: () -> Unit, onShareAgain: () -> Unit, onAnalyze: (String) -> Unit) {
@@ -1129,7 +1215,7 @@ private fun ChatAnswerDialog(hasPhoto: Boolean, onDismiss: () -> Unit, onShareAg
                         "Schick das Foto an deine Chat-App ab (die Frage steckt mit drin und liegt zusätzlich in der Zwischenablage). " +
                             "Kopiere dann die Antwort und füge sie hier ein."
                     } else {
-                        "Füge hier die Antwort ein, die dir die Chat-App zu deinem Foto gegeben hat."
+                        "Füge hier die Antwort ein, die dir die Chat-App zu deinem Essen gegeben hat."
                     },
                     style = MaterialTheme.typography.bodyMedium,
                 )
