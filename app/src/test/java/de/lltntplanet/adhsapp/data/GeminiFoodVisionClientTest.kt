@@ -73,38 +73,52 @@ class GeminiFoodVisionClientTest {
         assertEquals("application/json", body["generationConfig"]!!.jsonObject["responseMimeType"]!!.jsonPrimitive.content)
     }
 
+    private fun fastClient(timeoutMs: Long) = GeminiFoodVisionClient(
+        { "AIza-test" },
+        server.url("/v1beta").toString(),
+        okhttp3.OkHttpClient.Builder().readTimeout(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS).build(),
+    )
+
+    private fun noResponse() = MockResponse().setSocketPolicy(okhttp3.mockwebserver.SocketPolicy.NO_RESPONSE)
+
     @Test
-    fun timeoutFallsBackToNextModelAndThinkingIsDisabledFor25Models() = runTest {
-        server.enqueue(MockResponse().setSocketPolicy(okhttp3.mockwebserver.SocketPolicy.NO_RESPONSE))
+    fun firstTimeoutRetriesSameModelOnFreshConnectionAndThinkingIsDisabledFor25Models() = runTest {
+        server.enqueue(noResponse())
         server.enqueue(ok(answer))
-        val fast = GeminiFoodVisionClient(
-            { "AIza-test" },
-            server.url("/v1beta").toString(),
-            okhttp3.OkHttpClient.Builder().readTimeout(300, java.util.concurrent.TimeUnit.MILLISECONDS).build(),
-        )
-        val result = fast.analyzeText("1 Apfel")
+        val result = fastClient(300).analyzeText("1 Apfel")
         assertEquals(300, result.totalKcal)
         val first = server.takeRequest()
         assertTrue(first.path!!.contains(GeminiFoodVisionClient.MODELS[0]))
         val firstBody = Json.parseToJsonElement(first.body.readUtf8()).jsonObject
         assertEquals("0", firstBody["generationConfig"]!!.jsonObject["thinkingConfig"]!!.jsonObject["thinkingBudget"]!!.jsonPrimitive.content)
+        // Zweiter Versuch geht noch einmal an dasselbe Modell (frische Verbindung), nicht sofort an das nächste.
+        assertTrue(server.takeRequest().path!!.contains(GeminiFoodVisionClient.MODELS[0]))
+    }
+
+    @Test
+    fun secondTimeoutFallsBackToNextModel() = runTest {
+        server.enqueue(noResponse())
+        server.enqueue(noResponse())
+        server.enqueue(ok(answer))
+        val result = fastClient(300).analyzeText("1 Apfel")
+        assertEquals(300, result.totalKcal)
+        assertTrue(server.takeRequest().path!!.contains(GeminiFoodVisionClient.MODELS[0]))
+        assertTrue(server.takeRequest().path!!.contains(GeminiFoodVisionClient.MODELS[0]))
         assertTrue(server.takeRequest().path!!.contains(GeminiFoodVisionClient.MODELS[1]))
     }
 
     @Test
-    fun allModelsTimingOutGivesReadableMessage() = runTest {
-        repeat(GeminiFoodVisionClient.MODELS.size) { server.enqueue(MockResponse().setSocketPolicy(okhttp3.mockwebserver.SocketPolicy.NO_RESPONSE)) }
-        val fast = GeminiFoodVisionClient(
-            { "AIza-test" },
-            server.url("/v1beta").toString(),
-            okhttp3.OkHttpClient.Builder().readTimeout(200, java.util.concurrent.TimeUnit.MILLISECONDS).build(),
-        )
+    fun allModelsTimingOutGivesReadableMessageWithAttempts() = runTest {
+        repeat(GeminiFoodVisionClient.MODELS.size + 1) { server.enqueue(noResponse()) }
         try {
-            fast.analyzeText("1 Apfel")
+            fastClient(200).analyzeText("1 Apfel")
             fail("expected timeout")
         } catch (e: FoodVisionException) {
             assertTrue(e.message!!.contains("Zeitüberschreitung"))
+            assertTrue(e.message!!.contains("frischer Verbindung"))
+            GeminiFoodVisionClient.MODELS.forEach { assertTrue(e.message!!.contains(it)) }
         }
+        assertEquals(GeminiFoodVisionClient.MODELS.size + 1, server.requestCount)
     }
 
     @Test

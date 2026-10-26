@@ -211,7 +211,7 @@ Der GitHub-Token für Updates liegt im privaten App-Speicher und ist von Geräte
 - Google Health API v4 (`health.googleapis.com`) und Google Tasks API über `AuthorizationClient` (Google Identity Services) und OkHttp
 - Foto-Erkennung von Mahlzeiten wahlweise über das Teilen-Menü an eine Chat-App (`ACTION_SEND` mit Bild + Frage,
   Antwort zurück per Zwischenablage oder `ACTION_SEND text/plain` an die App, toleranter JSON-/Zeilen-Parser), über die Gemini API (`generativelanguage.googleapis.com`, `gemini-2.5-flash`,
-  Gratis-Kontingent, `inline_data` + `responseSchema`) oder die Claude Messages API (`api.anthropic.com`, `claude-opus-5-5`,
+  Gratis-Kontingent, `inline_data` + `responseSchema`, `thinkingBudget: 0`, 25 s pro Versuch; bei der ersten Zeitüberschreitung ein Wiederholungsversuch über eine frische Verbindung, danach Fallback auf `gemini-2.5-flash-lite` und `gemini-flash-latest`) oder die Claude Messages API (`api.anthropic.com`, `claude-opus-5-5`,
   strukturierte JSON-Ausgabe, Server-Fallback bei Ablehnung); Foto wird vorher auf 1280 px verkleinert
 - Health Connect (`androidx.health.connect:connect-client`): `NutritionRecord` je Mahlzeit mit fester Client-Kennung,
   Berechtigung `WRITE_NUTRITION`, Erklärungs-Activity für den Berechtigungsdialog
