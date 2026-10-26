@@ -29,7 +29,9 @@ enum class Sex(val label: String) { MALE("Männlich"), FEMALE("Weiblich") }
 
 data class AppSettings(
     /** Zusätzliche Vorwarnungen vor Terminen in Minuten (0 = zu Beginn). */
-    val eventOffsets: Set<Int> = setOf(15, 0),
+    val eventOffsets: Set<Int> = setOf(30, 15),
+    /** Termine mit genau diesem Titel (Groß-/Kleinschreibung egal) lösen keine Erinnerung aus. */
+    val ignoredEventTitles: Set<String> = setOf("Frühstück", "Mittagessen"),
     /** Die in Google Kalender eingestellten Erinnerungen eines Termins übernehmen. */
     val useCalendarReminders: Boolean = true,
     val allDayReminders: Boolean = true,
@@ -89,6 +91,9 @@ class SettingsRepository(private val context: Context) {
 
     private object Keys {
         val eventOffsets = stringSetPreferencesKey("event_offsets")
+        val ignoredEventTitles = stringSetPreferencesKey("ignored_event_titles")
+        /** Stand der Einstellungen; fehlt er, stammen die Werte aus einer Version mit anderen Vorgaben. */
+        val settingsVersion = intPreferencesKey("settings_version")
         val useCalendarReminders = booleanPreferencesKey("use_calendar_reminders")
         val allDayReminders = booleanPreferencesKey("all_day_reminders")
         val allDayReminderMinutes = intPreferencesKey("all_day_reminder_minutes")
@@ -134,8 +139,11 @@ class SettingsRepository(private val context: Context) {
 
     private fun Preferences.toSettings(): AppSettings {
         val d = AppSettings()
+        val storedOffsets = this[Keys.eventOffsets]?.mapNotNull { it.toIntOrNull() }?.toSet()
         return AppSettings(
-            eventOffsets = this[Keys.eventOffsets]?.mapNotNull { it.toIntOrNull() }?.toSet() ?: d.eventOffsets,
+            // Vor Version 1 war „15 Min. + zu Beginn“ die Vorgabe; wer sie nie geändert hat, bekommt die neue Vorgabe.
+            eventOffsets = storedOffsets?.takeUnless { this[Keys.settingsVersion] == null && it == LEGACY_EVENT_OFFSETS } ?: d.eventOffsets,
+            ignoredEventTitles = this[Keys.ignoredEventTitles] ?: d.ignoredEventTitles,
             useCalendarReminders = this[Keys.useCalendarReminders] ?: d.useCalendarReminders,
             allDayReminders = this[Keys.allDayReminders] ?: d.allDayReminders,
             allDayReminderMinutes = this[Keys.allDayReminderMinutes] ?: d.allDayReminderMinutes,
@@ -188,7 +196,9 @@ class SettingsRepository(private val context: Context) {
     }
 
     private fun MutablePreferences.write(s: AppSettings) {
+        this[Keys.settingsVersion] = SETTINGS_VERSION
         this[Keys.eventOffsets] = s.eventOffsets.map { it.toString() }.toSet()
+        this[Keys.ignoredEventTitles] = s.ignoredEventTitles
         this[Keys.useCalendarReminders] = s.useCalendarReminders
         this[Keys.allDayReminders] = s.allDayReminders
         this[Keys.allDayReminderMinutes] = s.allDayReminderMinutes
@@ -226,6 +236,11 @@ class SettingsRepository(private val context: Context) {
         this[Keys.lastUpdateCheck] = s.lastUpdateCheck
         this[Keys.dismissedUpdateCode] = s.dismissedUpdateCode
         this[Keys.dismissedUpdateAt] = s.dismissedUpdateAt
+    }
+
+    private companion object {
+        const val SETTINGS_VERSION = 1
+        val LEGACY_EVENT_OFFSETS = setOf(15, 0)
     }
 
     /** Zwischenspeicher der zuletzt geladenen Gesundheitsdaten (JSON). */

@@ -29,7 +29,11 @@ Weitere Bilder: [Essen](docs/screenshots/10-ernaehrung.png), [Monat](docs/screen
 - Gesperrtes Handy: die Erinnerung schaltet das Display ein und erscheint wie ein Wecker
 - Entsperrtes Handy: mit der Erlaubnis „Über anderen Apps anzeigen“ ebenfalls im Vollbild
 - Weckton und Vibration (bis zur Bestätigung, einstellbar), großer Countdown, „Verstanden“, „Erledigt“, „Später erinnern“ (5/10/30/60 Min.)
-- Termine: frei wählbare Vorwarnungen (z. B. 15 Min. vorher **und** zu Beginn) plus die Erinnerungen aus Google Kalender
+- Termine: frei wählbare Vorwarnungen (Standard: 30 **und** 15 Min. vorher, optional auch zu Beginn) plus die Erinnerungen
+  aus Google Kalender; Termine mit Titeln wie „Frühstück“ oder „Mittagessen“ lösen keine Erinnerung aus (Liste in den
+  Einstellungen anpassbar)
+- „Keine weiteren Erinnerungen zu diesem Termin“ im Vollbild und in der Benachrichtigung: unterdrückt alle weiteren
+  Vorwarnungen und Schlummer-Wiederholungen dieses Termins für den jeweiligen Tag
 - Geburtstage: am Tag und/oder 1/3/7 Tage vorher (für Geschenke)
 - Aufgaben: zur Fälligkeit; wiederkehrende Aufgaben (täglich, werktags, wöchentlich, monatlich) – ideal für Medikamente
 - Verpasste Erinnerungen (Handy war aus) kommen nach, solange der Termin noch läuft

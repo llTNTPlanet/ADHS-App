@@ -11,14 +11,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.InputChip
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -227,6 +231,41 @@ fun SettingsScreen(onBack: () -> Unit, onOpenSetup: () -> Unit) {
                 "Zusätzlich zu den Vorwarnungen oben",
                 s.useCalendarReminders,
             ) { v -> vm.update { it.copy(useCalendarReminders = v) } }
+            Label("Keine Erinnerung bei diesen Termin-Titeln")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                s.ignoredEventTitles.sorted().forEach { title ->
+                    InputChip(
+                        selected = false,
+                        onClick = { vm.update { it.copy(ignoredEventTitles = it.ignoredEventTitles - title) } },
+                        label = { Text(title) },
+                        trailingIcon = { Icon(Icons.Filled.Close, "Entfernen", Modifier.size(16.dp)) },
+                    )
+                }
+            }
+            var newIgnoredTitle by remember { mutableStateOf("") }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = newIgnoredTitle,
+                    onValueChange = { newIgnoredTitle = it },
+                    placeholder = { Text("z. B. Abendessen") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedButton(
+                    enabled = newIgnoredTitle.isNotBlank(),
+                    onClick = {
+                        val t = newIgnoredTitle.trim()
+                        vm.update { it.copy(ignoredEventTitles = it.ignoredEventTitles + t) }
+                        newIgnoredTitle = ""
+                    },
+                ) { Text("Hinzufügen") }
+            }
+            Text(
+                "Termine, die genau so heißen (Groß-/Kleinschreibung egal), erscheinen weiter im Kalender, lösen aber keine Erinnerung aus. " +
+                    "Im Vollbild gibt es außerdem „Keine weiteren Erinnerungen zu diesem Termin“ – das gilt nur für den jeweiligen Tag.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             SwitchSetting(
                 "Ganztägige Termine",
                 "Erinnerung am Tag um ${TimeFormat.minutesOfDay(s.allDayReminderMinutes)} Uhr",

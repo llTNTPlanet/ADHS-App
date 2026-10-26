@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Cake
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -99,6 +100,7 @@ class ReminderActivity : ComponentActivity() {
                         onDismiss = { handled(current) },
                         onSnooze = { minutes -> snooze(current, minutes) },
                         onDone = { done(current) },
+                        onMute = { mute(current) },
                         onOpen = { open(current) },
                     )
                 }
@@ -156,6 +158,12 @@ class ReminderActivity : ComponentActivity() {
 
     private fun snooze(r: Reminder, minutes: Int) {
         container.scope.launch { container.reminderEngine.snooze(r, minutes) }
+        handled(r)
+    }
+
+    /** Keine weiteren Erinnerungen zu diesem Termin an diesem Tag. */
+    private fun mute(r: Reminder) {
+        container.scope.launch { container.reminderEngine.mute(r) }
         handled(r)
     }
 
@@ -221,6 +229,7 @@ private fun AlertScreen(
     onDismiss: () -> Unit,
     onSnooze: (Int) -> Unit,
     onDone: () -> Unit,
+    onMute: () -> Unit,
     onOpen: () -> Unit,
 ) {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -361,6 +370,18 @@ private fun AlertScreen(
                                 border = BorderStroke(1.dp, Color.White.copy(alpha = 0.7f)),
                                 contentPadding = PaddingValues(horizontal = 4.dp),
                             ) { Text(label, maxLines = 1, softWrap = false) }
+                        }
+                    }
+                    if (r.canMute) {
+                        OutlinedButton(
+                            onClick = onMute,
+                            modifier = Modifier.fillMaxWidth().height(52.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.7f)),
+                        ) {
+                            Icon(Icons.Filled.NotificationsOff, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Keine weiteren Erinnerungen zu diesem Termin", maxLines = 1)
                         }
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

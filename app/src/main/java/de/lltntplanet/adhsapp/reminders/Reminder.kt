@@ -28,9 +28,17 @@ data class Reminder(
     val daysBefore: Int? = null,
     /** true, wenn die Erinnerung aus "Schlummern" stammt. */
     val snoozed: Boolean = false,
+    /** Bei geschlummerten Erinnerungen der Schlüssel der ursprünglichen Erinnerung. */
+    val originKey: String? = null,
 ) {
     val notificationId: Int get() = key.hashCode()
 
     /** Gleiches Vorkommen (Termin/Geburtstag) unabhängig von der Vorlaufzeit. */
     val occurrenceKey: String get() = if (snoozed) key else key.substringBeforeLast(':')
+
+    /** Vorkommen, das mit „Keine weiteren Erinnerungen“ stummgeschaltet wird – auch aus einer geschlummerten Erinnerung heraus. */
+    val muteKey: String get() = (originKey ?: key).substringBeforeLast(':')
+
+    /** Lässt sich dieses Vorkommen stummschalten? (Nicht bei Test-Erinnerungen.) */
+    val canMute: Boolean get() = kind == ReminderKind.EVENT && refId != null && !(originKey ?: key).startsWith("test:")
 }
