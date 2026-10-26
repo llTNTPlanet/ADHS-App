@@ -4,6 +4,8 @@
 
     <!-- Google Health API, Google Tasks, Foto-Erkennung -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Für die Meldung "Keine Internetverbindung" bei der Update-Prüfung -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Fotos von Mahlzeiten (Kamera-App wird nur gestartet, kein direkter Kamerazugriff nötig) -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 

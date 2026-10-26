@@ -42,6 +42,7 @@ class UpdateManager(
     private val notifier: UpdateNotifier,
     private val scope: CoroutineScope,
     private val currentVersionCode: Int = BuildConfig.VERSION_CODE,
+    private val hasInternet: () -> Boolean = { NetworkStatus.hasInternet(context) },
 ) {
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val state: StateFlow<UpdateState> = _state.asStateFlow()
@@ -79,7 +80,7 @@ class UpdateManager(
                 if (e is CancellationException) throw e
                 Log.w(TAG, "Update-Prüfung fehlgeschlagen", e)
                 _state.value = if (userInitiated) {
-                    UpdateState.Failed(e.message ?: "Update-Prüfung fehlgeschlagen.", null)
+                    UpdateState.Failed(failureMessage(e), null)
                 } else {
                     UpdateState.Idle
                 }
@@ -198,6 +199,13 @@ class UpdateManager(
     fun onInstallFailed(message: String) {
         _state.value = UpdateState.Failed(message, pendingInfo)
         if (isAppVisible()) _dialogVisible.value = true else notifier.notifyFailed(message)
+    }
+
+    /** Unterscheidet "kein Internet" von "GitHub im Netz gesperrt", damit die Meldung zum Problem passt. */
+    private fun failureMessage(e: Throwable): String = when {
+        e is UpdateNetworkException && e.hostUnresolved && !hasInternet() ->
+            "Keine Internetverbindung. Bitte WLAN oder mobile Daten einschalten und erneut nach Updates suchen."
+        else -> e.message ?: "Update-Prüfung fehlgeschlagen."
     }
 
     fun isAppVisible(): Boolean =
