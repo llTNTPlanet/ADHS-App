@@ -36,8 +36,9 @@ class GeminiFoodVisionClient(
     private val apiKey: () -> String?,
     private val baseUrl: String = "https://generativelanguage.googleapis.com/v1beta",
     private val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(120, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
         .build(),
 ) : FoodRecognizer {
     override val configured: Boolean get() = !apiKey().isNullOrBlank()
@@ -51,33 +52,41 @@ class GeminiFoodVisionClient(
     private suspend fun request(imageBase64: String?, userText: String): FoodRecognition {
         val key = apiKey()?.takeIf { it.isNotBlank() }
             ?: throw FoodVisionException(0, "Kein Gemini-API-Schlüssel hinterlegt. Trage ihn in den Einstellungen unter „Ernährung“ ein.")
-        val body = buildRequest(imageBase64, userText)
         var lastError: FoodVisionException? = null
         for (model in MODELS) {
-            val (code, text) = withContext(Dispatchers.IO) {
-                val request = Request.Builder()
-                    .url("$baseUrl/models/$model:generateContent")
-                    .header("x-goog-api-key", key)
-                    .header("content-type", "application/json")
-                    .post(body.toRequestBody(JSON))
-                    .build()
-                client.newCall(request).execute().use { it.code to it.body?.string().orEmpty() }
+            val body = buildRequest(imageBase64, userText, model)
+            val (code, text) = try {
+                withContext(Dispatchers.IO) {
+                    val request = Request.Builder()
+                        .url("$baseUrl/models/$model:generateContent")
+                        .header("x-goog-api-key", key)
+                        .header("content-type", "application/json")
+                        .post(body.toRequestBody(JSON))
+                        .build()
+                    client.newCall(request).execute().use { it.code to it.body?.string().orEmpty() }
+                }
+            } catch (e: java.io.IOException) {
+                // Zeitüberschreitung oder Netzfehler: nächstes (schnelleres) Modell probieren.
+                lastError = FoodVisionException(-1, networkMessage(e))
+                continue
             }
             if (code in 200..299) return parseResponse(text)
             lastError = FoodVisionException(code, errorMessage(code, text))
-            // Modell nicht (mehr) verfügbar → nächstes probieren; alles andere ist endgültig.
-            if (code != 404) throw lastError
+            // Modell nicht (mehr) verfügbar oder überlastet → nächstes probieren; alles andere ist endgültig.
+            if (code != 404 && code != 503) throw lastError
         }
         throw lastError ?: FoodVisionException(0, "Erkennung fehlgeschlagen")
     }
 
     companion object {
-        /** Reihenfolge: zuerst das neueste kostenlose Flash-Modell, dann Ersatz, falls es abgeschaltet wurde. */
-        val MODELS = listOf("gemini-2.5-flash", "gemini-3.8-flash", "gemini-2.5-flash-lite")
+        /** Reihenfolge: zuerst das kostenlose Flash-Modell, dann das schnellere Lite-Modell, zuletzt der Alias auf das aktuelle Flash. */
+        val MODELS = listOf("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-flash-latest")
+        /** Pro Modell höchstens so lange auf die Antwort warten; danach wird das nächste Modell probiert. */
+        const val READ_TIMEOUT_SECONDS = 45L
         private val JSON = "application/json".toMediaType()
 
         /** [imageBase64] null → reine Textanfrage (Beschreibung des Essens in [userText]). */
-        internal fun buildRequest(imageBase64: String?, userText: String): String {
+        internal fun buildRequest(imageBase64: String?, userText: String, model: String = MODELS[0]): String {
             val schema = buildJsonObject {
                 put("type", "OBJECT")
                 putJsonObject("properties") {
@@ -134,6 +143,8 @@ class GeminiFoodVisionClient(
                     put("responseMimeType", "application/json")
                     put("responseSchema", schema)
                     put("temperature", 0.2)
+                    // Die 2.5er-Modelle „denken“ sonst erst lange nach – für eine Kalorienschätzung unnötig und der Hauptgrund für Zeitüberschreitungen.
+                    if ("2.5" in model) putJsonObject("thinkingConfig") { put("thinkingBudget", 0) }
                 }
             }
             return GoogleJson.encodeToString(JsonObject.serializer(), request)
@@ -155,18 +166,35 @@ class GeminiFoodVisionClient(
             return FoodVisionClient.parseRecognition(text)
         }
 
+        internal fun networkMessage(e: java.io.IOException): String = when (e) {
+            is java.net.SocketTimeoutException ->
+                "Zeitüberschreitung – Gemini hat nicht innerhalb von $READ_TIMEOUT_SECONDS Sekunden geantwortet. " +
+                    "Bitte Internetverbindung prüfen und noch einmal versuchen."
+            is java.net.UnknownHostException -> "Keine Internetverbindung – generativelanguage.googleapis.com ist nicht erreichbar."
+            else -> "Netzwerkfehler: ${e.message ?: e.javaClass.simpleName}"
+        }
+
         private fun errorMessage(code: Int, body: String): String {
             val apiMessage = runCatching {
                 GoogleJson.parseToJsonElement(body).jsonObject["error"]?.jsonObject?.get("message")?.jsonPrimitive?.content
             }.getOrNull()
-            return when (code) {
+            return when {
+                apiMessage?.contains("location is not supported", ignoreCase = true) == true ->
+                    "Google bietet die kostenlose Gemini-API in deinem Land nicht an (Standort nicht unterstützt). " +
+                        "In Google AI Studio ein Abrechnungskonto hinterlegen oder in der App den Weg „Chat-App“ wählen."
+                else -> errorForCode(code, apiMessage)
+            }
+        }
+
+        private fun errorForCode(code: Int, apiMessage: String?): String =
+            when (code) {
                 400, 401, 403 -> "Der Gemini-API-Schlüssel ist ungültig oder nicht freigeschaltet" + (apiMessage?.let { ": $it" } ?: ".")
                 429 -> "Das kostenlose Kontingent ist für den Moment aufgebraucht – bitte eine Minute warten und noch einmal versuchen."
                 404 -> "Das Modell ist nicht verfügbar" + (apiMessage?.let { ": $it" } ?: ".")
+                503 -> "Gemini ist gerade überlastet (HTTP 503). Bitte in einer Minute noch einmal."
                 in 500..599 -> "Der Erkennungsdienst ist gerade nicht erreichbar (HTTP $code). Bitte später noch einmal."
                 else -> "Erkennung fehlgeschlagen (HTTP $code)" + (apiMessage?.let { ": $it" } ?: "")
             }
-        }
     }
 }
 

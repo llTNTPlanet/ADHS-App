@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.Alignment
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -81,6 +84,9 @@ fun FoodVisionSettings(settings: AppSettings, update: ((AppSettings) -> AppSetti
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     if (!provider.needsKey) return
+    val scope = rememberCoroutineScope()
+    var testResult by remember(provider) { mutableStateOf<String?>(null) }
+    var testing by remember { mutableStateOf(false) }
     OutlinedTextField(
         value = input,
         onValueChange = { input = it },
@@ -113,8 +119,40 @@ fun FoodVisionSettings(settings: AppSettings, update: ((AppSettings) -> AppSetti
                         FoodVisionProvider.GEMINI -> container.secrets.setGeminiApiKey(null)
                         FoodVisionProvider.CLAUDE -> container.secrets.setAnthropicApiKey(null)
                     }
+                    testResult = null
                 },
             ) { Text("Löschen") }
+        }
+    }
+    if (saved != null) {
+        Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                enabled = !testing,
+                onClick = {
+                    testing = true
+                    testResult = null
+                    scope.launch {
+                        val started = System.currentTimeMillis()
+                        testResult = runCatching { container.foodVision.analyzeText("1 Apfel") }.fold(
+                            onSuccess = { r ->
+                                val secs = (System.currentTimeMillis() - started) / 1000.0
+                                "Verbindung OK (${"%.1f".format(secs)} s): " +
+                                    (r.items.firstOrNull()?.let { "${it.name} ≈ ${it.kcal} kcal" } ?: "keine Einträge, aber Antwort erhalten")
+                            },
+                            onFailure = { "Fehler: ${it.message ?: it.javaClass.simpleName}" },
+                        )
+                        testing = false
+                    }
+                },
+            ) { Text(if (testing) "Teste …" else "Verbindung testen") }
+            if (testing) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+        }
+        testResult?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (it.startsWith("Fehler")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+            )
         }
     }
     Text(

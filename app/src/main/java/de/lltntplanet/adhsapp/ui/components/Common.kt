@@ -3,6 +3,7 @@ package de.lltntplanet.adhsapp.ui.components
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -66,6 +67,16 @@ fun appContainer(): AppContainer = (LocalContext.current.applicationContext as A
 inline fun <reified VM : ViewModel> appViewModel(crossinline create: (AppContainer) -> VM): VM {
     val container = appContainer()
     return viewModel(factory = viewModelFactory { initializer { create(container) } })
+}
+
+private val SettingsIcon get() = androidx.compose.material.icons.Icons.Filled.Settings
+
+/** Zahnrad in der Kopfzeile jeder Seite: öffnet die Einstellungen. */
+@Composable
+fun SettingsAction(onClick: () -> Unit) {
+    androidx.compose.material3.IconButton(onClick = onClick) {
+        androidx.compose.material3.Icon(SettingsIcon, contentDescription = "Einstellungen")
+    }
 }
 
 @Composable

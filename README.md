@@ -71,7 +71,8 @@ Weitere Bilder: [Essen](docs/screenshots/10-ernaehrung.png), [Monat](docs/screen
     oder du teilst sie aus dem Chat direkt an **„Kalorien eintragen (ADHS App)“** – die App liest das Ergebnis (JSON oder
     Zeilen wie „Reis, 200 g, 260 kcal“) und zeigt es zur Prüfung an
   - **Gemini-API (kostenlos, mit Schlüssel):** einmalig einen Schlüssel in Google AI Studio erstellen (Google-Konto genügt),
-    danach läuft die Erkennung direkt in der App
+    danach läuft die Erkennung direkt in der App; „Verbindung testen“ in den Einstellungen zeigt, ob Schlüssel und Netz passen.
+    Hinweis: In der EU bietet Google das Gratis-Kontingent nur mit hinterlegtem Abrechnungskonto an – die App sagt es dann klar
   - **Claude-API:** Anthropic-Schlüssel mit Guthaben, ca. ein Cent pro Foto
 
   Fotos werden nur für die Erkennung übertragen und nicht gespeichert

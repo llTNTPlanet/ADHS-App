@@ -74,6 +74,40 @@ class GeminiFoodVisionClientTest {
     }
 
     @Test
+    fun timeoutFallsBackToNextModelAndThinkingIsDisabledFor25Models() = runTest {
+        server.enqueue(MockResponse().setSocketPolicy(okhttp3.mockwebserver.SocketPolicy.NO_RESPONSE))
+        server.enqueue(ok(answer))
+        val fast = GeminiFoodVisionClient(
+            { "AIza-test" },
+            server.url("/v1beta").toString(),
+            okhttp3.OkHttpClient.Builder().readTimeout(300, java.util.concurrent.TimeUnit.MILLISECONDS).build(),
+        )
+        val result = fast.analyzeText("1 Apfel")
+        assertEquals(300, result.totalKcal)
+        val first = server.takeRequest()
+        assertTrue(first.path!!.contains(GeminiFoodVisionClient.MODELS[0]))
+        val firstBody = Json.parseToJsonElement(first.body.readUtf8()).jsonObject
+        assertEquals("0", firstBody["generationConfig"]!!.jsonObject["thinkingConfig"]!!.jsonObject["thinkingBudget"]!!.jsonPrimitive.content)
+        assertTrue(server.takeRequest().path!!.contains(GeminiFoodVisionClient.MODELS[1]))
+    }
+
+    @Test
+    fun allModelsTimingOutGivesReadableMessage() = runTest {
+        repeat(GeminiFoodVisionClient.MODELS.size) { server.enqueue(MockResponse().setSocketPolicy(okhttp3.mockwebserver.SocketPolicy.NO_RESPONSE)) }
+        val fast = GeminiFoodVisionClient(
+            { "AIza-test" },
+            server.url("/v1beta").toString(),
+            okhttp3.OkHttpClient.Builder().readTimeout(200, java.util.concurrent.TimeUnit.MILLISECONDS).build(),
+        )
+        try {
+            fast.analyzeText("1 Apfel")
+            fail("expected timeout")
+        } catch (e: FoodVisionException) {
+            assertTrue(e.message!!.contains("Zeitüberschreitung"))
+        }
+    }
+
+    @Test
     fun fallsBackToNextModelOn404() = runTest {
         server.enqueue(MockResponse().setResponseCode(404).setBody("""{"error":{"message":"model not found"}}"""))
         server.enqueue(ok(answer))

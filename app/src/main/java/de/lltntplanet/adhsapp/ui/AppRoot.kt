@@ -128,12 +128,13 @@ fun AppRoot(requestedTab: Tab?, onTabHandled: () -> Unit) {
                 CalendarScreen(
                     onCreateEvent = { nav.navigate("event/new?start=$it") },
                     onEditEvent = { nav.navigate("event/edit/$it") },
+                    onOpenSettings = { nav.navigate("settings") },
                 )
             }
-            composable(Tab.TASKS.route) { TasksScreen() }
-            composable(Tab.BIRTHDAYS.route) { BirthdaysScreen() }
-            composable(Tab.HEALTH.route) { HealthScreen() }
-            composable(Tab.NUTRITION.route) { NutritionScreen() }
+            composable(Tab.TASKS.route) { TasksScreen(onOpenSettings = { nav.navigate("settings") }) }
+            composable(Tab.BIRTHDAYS.route) { BirthdaysScreen(onOpenSettings = { nav.navigate("settings") }) }
+            composable(Tab.HEALTH.route) { HealthScreen(onOpenSettings = { nav.navigate("settings") }) }
+            composable(Tab.NUTRITION.route) { NutritionScreen(onOpenSettings = { nav.navigate("settings") }) }
             composable("settings") {
                 SettingsScreen(onBack = { nav.popBackStack() }, onOpenSetup = { nav.navigate("setup") })
             }

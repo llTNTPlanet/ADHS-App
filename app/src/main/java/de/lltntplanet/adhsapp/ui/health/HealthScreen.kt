@@ -59,6 +59,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import de.lltntplanet.adhsapp.AppContainer
+import de.lltntplanet.adhsapp.ui.components.SettingsAction
 import de.lltntplanet.adhsapp.data.google.GoogleFeature
 import de.lltntplanet.adhsapp.data.google.NotAuthorizedException
 import de.lltntplanet.adhsapp.data.google.TokenResult
@@ -152,7 +153,7 @@ private val numberFormat: NumberFormat = NumberFormat.getIntegerInstance(TimeFor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HealthScreen(modifier: Modifier = Modifier) {
+fun HealthScreen(modifier: Modifier = Modifier, onOpenSettings: () -> Unit = {}) {
     val vm = appViewModel { HealthViewModel(it) }
     val snapshot by vm.snapshot.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
@@ -178,6 +179,7 @@ fun HealthScreen(modifier: Modifier = Modifier) {
                             IconButton(onClick = vm::refresh) { Icon(Icons.Filled.Refresh, "Aktualisieren") }
                         }
                     }
+                    SettingsAction(onOpenSettings)
                 },
             )
         },

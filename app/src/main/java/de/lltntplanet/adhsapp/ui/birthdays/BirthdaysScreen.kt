@@ -52,6 +52,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import de.lltntplanet.adhsapp.AppContainer
+import de.lltntplanet.adhsapp.ui.components.SettingsAction
 import de.lltntplanet.adhsapp.data.birthdays.BirthdayMath
 import de.lltntplanet.adhsapp.data.birthdays.BirthdaySource
 import de.lltntplanet.adhsapp.data.birthdays.UpcomingBirthday
@@ -114,7 +115,7 @@ class BirthdaysViewModel(private val c: AppContainer) : ViewModel() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BirthdaysScreen(modifier: Modifier = Modifier) {
+fun BirthdaysScreen(modifier: Modifier = Modifier, onOpenSettings: () -> Unit = {}) {
     val vm = appViewModel { BirthdaysViewModel(it) }
     val upcoming by vm.upcoming.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
@@ -135,7 +136,7 @@ fun BirthdaysScreen(modifier: Modifier = Modifier) {
 
     Scaffold(
         modifier = modifier,
-        topBar = { TopAppBar(title = { Text("Geburtstage") }) },
+        topBar = { TopAppBar(title = { Text("Geburtstage") }, actions = { SettingsAction(onOpenSettings) }) },
         floatingActionButton = {
             FloatingActionButton(onClick = { editing = BirthdayEntity(name = "", month = 1, day = 1) }, shape = RoundedCornerShape(16.dp)) {
                 Icon(Icons.Filled.Add, "Geburtstag hinzufügen")

@@ -50,6 +50,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.lltntplanet.adhsapp.data.db.TaskEntity
+import de.lltntplanet.adhsapp.ui.components.SettingsAction
 import de.lltntplanet.adhsapp.data.tasks.TaskLogic
 import de.lltntplanet.adhsapp.data.tasks.TaskSection
 import de.lltntplanet.adhsapp.ui.components.EmptyHint
@@ -60,7 +61,7 @@ import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TasksScreen(modifier: Modifier = Modifier) {
+fun TasksScreen(modifier: Modifier = Modifier, onOpenSettings: () -> Unit = {}) {
     val vm = appViewModel { TasksViewModel(it) }
     val tasks by vm.tasks.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
@@ -87,6 +88,7 @@ fun TasksScreen(modifier: Modifier = Modifier) {
                             IconButton(onClick = { vm.sync() }) { Icon(Icons.Filled.Sync, "Mit Google Tasks abgleichen") }
                         }
                     }
+                    SettingsAction(onOpenSettings)
                 },
             )
         },
