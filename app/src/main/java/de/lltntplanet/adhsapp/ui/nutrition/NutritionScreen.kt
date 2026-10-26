@@ -92,6 +92,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import de.lltntplanet.adhsapp.AppContainer
+import de.lltntplanet.adhsapp.ui.components.SettingsAction
 import de.lltntplanet.adhsapp.data.db.FoodEntryEntity
 import de.lltntplanet.adhsapp.data.db.MealType
 import de.lltntplanet.adhsapp.data.nutrition.CalorieBalance
@@ -383,7 +384,7 @@ private val MealType.color: Color
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NutritionScreen(modifier: Modifier = Modifier) {
+fun NutritionScreen(modifier: Modifier = Modifier, onOpenSettings: () -> Unit = {}) {
     val vm = appViewModel { NutritionViewModel(it) }
     val day by vm.day.collectAsStateWithLifecycle()
     val date by vm.date.collectAsStateWithLifecycle()
@@ -458,6 +459,7 @@ fun NutritionScreen(modifier: Modifier = Modifier) {
                 title = { Text("Ernährung") },
                 actions = {
                     IconButton(onClick = { showProfile = true }) { Icon(Icons.Filled.Person, "Profil für den Grundumsatz") }
+                    SettingsAction(onOpenSettings)
                 },
             )
         },

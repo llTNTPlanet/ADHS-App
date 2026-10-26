@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.lltntplanet.adhsapp.data.calendar.EventInstance
+import de.lltntplanet.adhsapp.ui.components.SettingsAction
 import de.lltntplanet.adhsapp.data.settings.CalendarViewMode
 import de.lltntplanet.adhsapp.ui.components.DatePickDialog
 import de.lltntplanet.adhsapp.ui.components.InfoCard
@@ -90,6 +91,7 @@ fun CalendarScreen(
     onCreateEvent: (LocalDateTime) -> Unit,
     onEditEvent: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenSettings: () -> Unit = {},
 ) {
     val vm = appViewModel { CalendarViewModel(it) }
     val settings by vm.settings.collectAsStateWithLifecycle()
@@ -201,6 +203,7 @@ fun CalendarScreen(
                     },
                     actions = {
                         TodayButton(onClick = { jumpTo(LocalDate.now()) })
+                        SettingsAction(onOpenSettings)
                     },
                 )
             },
