@@ -58,10 +58,11 @@ Weitere Bilder: [Essen](docs/screenshots/10-ernaehrung.png), [Monat](docs/screen
   Defizit (z. B. −300 kcal zum Abnehmen)
 - Mahlzeiten Morgens / Mittags / Abends / Zwischendurch mit Einträgen (Name, kcal, Menge); Vorschläge aus den
   letzten Einträgen; Pfeile zum Blättern durch die Tage wie in Google Health
-- **Foto-Erkennung:** Teller oder Verpackung fotografieren (Kamera oder Galerie) – die Lebensmittel werden erkannt,
-  Nährwerttabellen gelesen und die Kalorien geschätzt; alles lässt sich vor dem Eintragen prüfen und anpassen.
-  Drei Wege (Einstellungen → Ernährung):
-  - **Chat-App (kostenlos, ohne Schlüssel):** Das Foto geht mit einer fertigen Frage über „Teilen“ an eine beliebige
+- **Kalorien schätzen lassen – per Foto oder in Worten:** Teller oder Verpackung fotografieren (Kamera oder Galerie),
+  oder über den Sprechblasen-Knopf einfach aufschreiben, was du gegessen hast („2 Brötchen mit Käse, 1 Apfel, Milchkaffee“).
+  Die Lebensmittel werden erkannt, Nährwerttabellen gelesen bzw. übliche Portionen angenommen und die Kalorien geschätzt;
+  alles lässt sich vor dem Eintragen prüfen und anpassen. Drei Wege (Einstellungen → Ernährung):
+  - **Chat-App (kostenlos, ohne Schlüssel):** Das Foto bzw. die Beschreibung geht mit einer fertigen Frage über „Teilen“ an eine beliebige
     Chat-App (Gemini, ChatGPT, Claude, Copilot …). Die Antwort kopierst du und fügst sie in der App ein („Aus Zwischenablage“),
     oder du teilst sie aus dem Chat direkt an **„Kalorien eintragen (ADHS App)“** – die App liest das Ergebnis (JSON oder
     Zeilen wie „Reis, 200 g, 260 kcal“) und zeigt es zur Prüfung an

@@ -59,6 +59,21 @@ class GeminiFoodVisionClientTest {
     }
 
     @Test
+    fun textDescriptionIsSentWithoutImage() = runTest {
+        server.enqueue(ok(answer))
+        val result = client().analyzeText("2 Brötchen mit Käse, 1 Apfel")
+        assertEquals(300, result.totalKcal)
+
+        val body = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+        val parts = body["contents"]!!.jsonArray[0].jsonObject["parts"]!!.jsonArray
+        assertEquals(1, parts.size)
+        val text = parts[0].jsonObject["text"]!!.jsonPrimitive.content
+        assertTrue(text.contains("2 Brötchen mit Käse, 1 Apfel"))
+        assertTrue(text.contains("beschreibt"))
+        assertEquals("application/json", body["generationConfig"]!!.jsonObject["responseMimeType"]!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun fallsBackToNextModelOn404() = runTest {
         server.enqueue(MockResponse().setResponseCode(404).setBody("""{"error":{"message":"model not found"}}"""))
         server.enqueue(ok(answer))

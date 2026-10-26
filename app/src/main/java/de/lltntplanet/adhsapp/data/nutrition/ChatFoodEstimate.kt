@@ -8,16 +8,24 @@ import de.lltntplanet.adhsapp.data.db.MealType
  * (oder teilt sie an die App), und [parseAnswer] macht daraus eine [FoodRecognition].
  */
 object ChatFoodEstimate {
+    private const val FORMAT =
+        "Namen kurz und deutsch, kcal als ganze Zahl, Menge wie „250 g“ oder „1 Stück“, confidence = hoch/mittel/niedrig. " +
+            "mealGuess ist deine Vermutung zur Mahlzeit: BREAKFAST, LUNCH, DINNER, SNACK oder null.\n\n" +
+            "Antworte NUR mit diesem JSON, ohne Erklärung davor oder danach:\n" +
+            "{\"items\":[{\"name\":\"Reis\",\"amount\":\"200 g\",\"kcal\":260,\"confidence\":\"mittel\"}],\"mealGuess\":\"LUNCH\",\"note\":\"kurzer Hinweis\"}"
+
     /** Anweisung, die zusammen mit dem Foto geteilt und zusätzlich in die Zwischenablage gelegt wird. */
-    val PROMPT: String = buildString {
-        append("Schätze bitte die Kalorien auf diesem Foto. ")
-        append("Erkenne jedes Lebensmittel bzw. Produkt (Teller, Snack oder Verpackung – bei Verpackungen Produktname und Nährwerttabelle lesen), ")
-        append("schätze pro Eintrag die gegessene Menge und die Kilokalorien. Beilagen als eigene Einträge (z. B. Reis, Hähnchenbrust, Soße). ")
-        append("Namen kurz und deutsch, kcal als ganze Zahl, Menge wie „250 g“ oder „1 Stück“, confidence = hoch/mittel/niedrig. ")
-        append("mealGuess ist deine Vermutung zur Mahlzeit: BREAKFAST, LUNCH, DINNER, SNACK oder null.\n\n")
-        append("Antworte NUR mit diesem JSON, ohne Erklärung davor oder danach:\n")
-        append("{\"items\":[{\"name\":\"Reis\",\"amount\":\"200 g\",\"kcal\":260,\"confidence\":\"mittel\"}],\"mealGuess\":\"LUNCH\",\"note\":\"kurzer Hinweis\"}")
-    }
+    val PROMPT: String =
+        "Schätze bitte die Kalorien auf diesem Foto. " +
+            "Erkenne jedes Lebensmittel bzw. Produkt (Teller, Snack oder Verpackung – bei Verpackungen Produktname und Nährwerttabelle lesen), " +
+            "schätze pro Eintrag die gegessene Menge und die Kilokalorien. Beilagen als eigene Einträge (z. B. Reis, Hähnchenbrust, Soße). " +
+            FORMAT
+
+    /** Anweisung für eine Beschreibung in Worten (ohne Foto), die als Text an die Chat-App geteilt wird. */
+    fun textPrompt(description: String): String =
+        "Schätze bitte die Kalorien für folgendes Essen:\n„" + description.trim() + "“\n\n" +
+            "Mache aus jedem genannten Lebensmittel einen Eintrag, übernimm genannte Mengen und nimm sonst übliche Portionen an. " +
+            FORMAT
 
     /**
      * Macht aus der Chat-Antwort eine Erkennung. Verträgt Markdown-Codeblöcke, Text vor und nach dem JSON

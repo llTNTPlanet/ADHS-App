@@ -63,10 +63,16 @@ class FoodVisionClient(
      * [jpeg] ist das (verkleinerte) Foto, [hint] ein optionaler Freitext des Nutzers
      * ("halbe Portion", "Packung ist 400 g").
      */
-    override suspend fun analyze(jpeg: ByteArray, hint: String?): FoodRecognition {
+    override suspend fun analyze(jpeg: ByteArray, hint: String?): FoodRecognition =
+        request(java.util.Base64.getEncoder().encodeToString(jpeg), FoodVisionPrompt.photoText(hint))
+
+    override suspend fun analyzeText(description: String): FoodRecognition =
+        request(null, FoodVisionPrompt.descriptionText(description))
+
+    private suspend fun request(imageBase64: String?, userText: String): FoodRecognition {
         val key = apiKey()?.takeIf { it.isNotBlank() }
             ?: throw FoodVisionException(0, "Kein Claude-API-Schlüssel hinterlegt. Trage ihn in den Einstellungen unter „Ernährung“ ein.")
-        val body = buildRequest(java.util.Base64.getEncoder().encodeToString(jpeg), hint)
+        val body = buildRequest(imageBase64, userText)
         val (code, text) = withContext(Dispatchers.IO) {
             val request = Request.Builder()
                 .url(baseUrl)
@@ -88,11 +94,8 @@ class FoodVisionClient(
         const val FALLBACK_BETA = "server-side-fallback-2026-07-01"
         private val JSON = "application/json".toMediaType()
 
-        internal fun buildRequest(imageBase64: String, hint: String?): String {
-            val userText = buildString {
-                append("Bitte erkenne das Essen auf dem Foto und schätze die Kalorien.")
-                if (!hint.isNullOrBlank()) append(" Hinweis des Nutzers: ").append(hint.trim())
-            }
+        /** [imageBase64] null → reine Textanfrage (Beschreibung des Essens in [userText]). */
+        internal fun buildRequest(imageBase64: String?, userText: String): String {
             val schema = buildJsonObject {
                 put("type", "object")
                 putJsonObject("properties") {
@@ -138,16 +141,18 @@ class FoodVisionClient(
                         buildJsonObject {
                             put("role", "user")
                             putJsonArray("content") {
-                                add(
-                                    buildJsonObject {
-                                        put("type", "image")
-                                        putJsonObject("source") {
-                                            put("type", "base64")
-                                            put("media_type", "image/jpeg")
-                                            put("data", imageBase64)
-                                        }
-                                    },
-                                )
+                                if (imageBase64 != null) {
+                                    add(
+                                        buildJsonObject {
+                                            put("type", "image")
+                                            putJsonObject("source") {
+                                                put("type", "base64")
+                                                put("media_type", "image/jpeg")
+                                                put("data", imageBase64)
+                                            }
+                                        },
+                                    )
+                                }
                                 add(buildJsonObject { put("type", "text"); put("text", userText) })
                             }
                         },
@@ -207,9 +212,12 @@ class FoodVisionClient(
 /** Gemeinsame Anweisung für alle Erkenner. */
 object FoodVisionPrompt {
     const val SYSTEM =
-        "Du bist eine Ernährungsassistenz in einer deutschen App. Der Nutzer fotografiert sein Essen: " +
+        "Du bist eine Ernährungsassistenz in einer deutschen App. Der Nutzer fotografiert sein Essen " +
+                "oder beschreibt es in Worten: " +
                 "einen Teller, eine Schüssel, einen Snack oder die Verpackung eines Produkts (Vorder- oder Rückseite mit Nährwerttabelle). " +
-                "Erkenne jedes Lebensmittel bzw. Produkt auf dem Bild und schätze pro Eintrag die gegessene Menge und die Kilokalorien. " +
+                "Erkenne jedes Lebensmittel bzw. Produkt auf dem Bild oder in der Beschreibung und schätze pro Eintrag die gegessene Menge und die Kilokalorien. " +
+                "Bei Beschreibungen: Übernimm genannte Mengen, sonst nimm übliche Portionen an und sag das in note; " +
+                "mehrere Lebensmittel in einem Satz oder einer Liste werden einzelne Einträge. " +
                 "Bei Verpackungen: Lies Produktname und Nährwerte von der Packung; ist die Nährwerttabelle sichtbar, rechne mit ihr; " +
                 "nimm als Menge eine typische Portion bzw. den Packungsinhalt, wenn er ablesbar ist, und sag das in note. " +
                 "Bei Tellern: Schätze die Portionsgröße anhand von Teller, Besteck und Händen. " +
@@ -217,4 +225,12 @@ object FoodVisionPrompt {
                 "Namen kurz und deutsch, kcal als ganze Zahl, amount wie „250 g“ oder „1 Stück“. " +
                 "mealGuess ist eine Vermutung zur Mahlzeit aus Art und Uhrzeit, sonst null. " +
                 "Ist kein Essen erkennbar, gib eine leere items-Liste und erkläre es kurz in note."
+
+    fun photoText(hint: String?): String = buildString {
+        append("Bitte erkenne das Essen auf dem Foto und schätze die Kalorien.")
+        if (!hint.isNullOrBlank()) append(" Hinweis des Nutzers: ").append(hint.trim())
+    }
+
+    fun descriptionText(description: String): String =
+        "Bitte schätze die Kalorien für folgendes Essen, das der Nutzer beschreibt:\n" + description.trim()
 }
