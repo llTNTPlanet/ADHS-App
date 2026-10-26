@@ -65,7 +65,7 @@ class ReminderEngine(
         result += ReminderPlanner.planTasks(taskDao.open(), s, zone)
         result += reminderDao.snoozes().mapNotNull { snooze ->
             runCatching { GoogleJson.decodeFromString<Reminder>(snooze.payload) }.getOrNull()
-                ?.copy(key = "snooze:${snooze.id}", triggerAt = snooze.triggerAt, snoozed = true)
+                ?.let { it.copy(key = "snooze:${snooze.id}", triggerAt = snooze.triggerAt, snoozed = true, originKey = it.originKey ?: it.key) }
         }
         return result.filter { it.snoozed || it.triggerAt in from..to }
     }
@@ -75,7 +75,7 @@ class ReminderEngine(
         val now = System.currentTimeMillis()
         val fired = firedKeys(now)
         val due = collect(now - LOOKBACK, now + LOOKAHEAD)
-            .filter { it.key !in fired && ReminderPlanner.isDue(it, now) }
+            .filter { !isBlocked(it, fired) && ReminderPlanner.isDue(it, now) }
         if (due.isNotEmpty()) {
             reminderDao.markFired(due.map { FiredReminderEntity(it.key, now) })
             due.filter { it.snoozed }.forEach { r -> r.key.removePrefix("snooze:").toLongOrNull()?.let { reminderDao.deleteSnooze(it) } }
@@ -93,14 +93,33 @@ class ReminderEngine(
     suspend fun next(): Reminder? {
         val now = System.currentTimeMillis()
         val fired = firedKeys(now)
-        return collect(now, now + LOOKAHEAD).filter { it.key !in fired && it.triggerAt >= now }.minByOrNull { it.triggerAt }
+        return collect(now, now + LOOKAHEAD).filter { !isBlocked(it, fired) && it.triggerAt >= now }.minByOrNull { it.triggerAt }
     }
 
     suspend fun snooze(reminder: Reminder, minutes: Int) {
-        val payload = GoogleJson.encodeToString(reminder.copy(snoozed = false))
+        val payload = GoogleJson.encodeToString(reminder.copy(snoozed = false, key = reminder.originKey ?: reminder.key, originKey = null))
         reminderDao.insertSnooze(SnoozeEntity(triggerAt = System.currentTimeMillis() + minutes * 60_000L, payload = payload))
         reschedule()
     }
+
+    /**
+     * „Keine weiteren Erinnerungen“: Alle noch ausstehenden Vorwarnungen und Schlummer-Wiederholungen dieses
+     * Termin-Vorkommens (dieser Tag) werden unterdrückt. Andere Tage desselben Termins bleiben unberührt.
+     */
+    suspend fun mute(reminder: Reminder) {
+        val muteKey = reminder.muteKey
+        reminderDao.markFired(listOf(FiredReminderEntity(muteMarker(muteKey), System.currentTimeMillis())))
+        reminderDao.snoozes().forEach { snooze ->
+            val original = runCatching { GoogleJson.decodeFromString<Reminder>(snooze.payload) }.getOrNull() ?: return@forEach
+            if (original.muteKey == muteKey) reminderDao.deleteSnooze(snooze.id)
+        }
+        reschedule()
+    }
+
+    /** Schon ausgelöst oder das ganze Vorkommen stummgeschaltet? */
+    private fun isBlocked(r: Reminder, fired: Set<String>): Boolean = r.key in fired || muteMarker(r.muteKey) in fired
+
+    private fun muteMarker(muteKey: String) = "mute:$muteKey"
 
     /** Test-Erinnerung in [seconds] Sekunden – prüft den kompletten Weg bis zum Vollbild. */
     suspend fun scheduleTest(seconds: Int = 10) {
@@ -127,7 +146,7 @@ class ReminderEngine(
         val pending = runCatching { collect(now - LOOKBACK, now + LOOKAHEAD) }
             .onFailure { Log.e(TAG, "Erinnerungen konnten nicht gesammelt werden", it) }
             .getOrElse { emptyList() }
-            .filter { it.key !in fired && (it.triggerAt > now || ReminderPlanner.isDue(it, now)) }
+            .filter { !isBlocked(it, fired) && (it.triggerAt > now || ReminderPlanner.isDue(it, now)) }
         val next = pending.minOfOrNull { it.triggerAt }
         val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
         val operation = alarmIntent(context)

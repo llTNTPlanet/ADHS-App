@@ -31,6 +31,42 @@ class ReminderPlannerTest {
     }
 
     @Test
+    fun defaultOffsetsAreThirtyAndFifteenMinutesBefore() {
+        val e = event(1, "2026-10-24T14:00", "2026-10-24T15:00")
+        val result = ReminderPlanner.planEvents(listOf(e), emptyMap(), AppSettings(), emptySet(), emptyList(), Berlin)
+        assertEquals(listOf(millis("2026-10-24T13:30"), millis("2026-10-24T13:45")), result.map { it.triggerAt }.sorted())
+    }
+
+    @Test
+    fun mealEventsAreNotReminded() {
+        val events = listOf(
+            event(1, "2026-10-24T08:00", "2026-10-24T08:30", title = "Frühstück"),
+            event(2, "2026-10-24T12:00", "2026-10-24T13:00", title = " mittagessen "),
+            event(3, "2026-10-24T14:00", "2026-10-24T15:00", title = "Mittagessen mit Anna"),
+            allDayEvent(4, LocalDate.of(2026, 10, 24), title = "Frühstück"),
+        )
+        val result = ReminderPlanner.planEvents(events, emptyMap(), AppSettings(), emptySet(), emptyList(), Berlin)
+        assertEquals(setOf(3L), result.map { it.refId }.toSet())
+        assertTrue(ReminderPlanner.isIgnoredTitle("FRÜHSTÜCK", setOf("Frühstück")))
+        assertFalse(ReminderPlanner.isIgnoredTitle("Frühstück", emptySet()))
+    }
+
+    @Test
+    fun muteKeyCoversAllWarningsOfOneOccurrenceEvenWhenSnoozed() {
+        val e = event(1, "2026-10-24T14:00", "2026-10-24T15:00")
+        val warnings = ReminderPlanner.planEvents(listOf(e), emptyMap(), AppSettings(), emptySet(), emptyList(), Berlin)
+        assertEquals(1, warnings.map { it.muteKey }.toSet().size)
+        val snoozed = warnings[0].copy(key = "snooze:7", snoozed = true, originKey = warnings[0].key)
+        assertEquals(warnings[1].muteKey, snoozed.muteKey)
+        assertTrue(snoozed.canMute)
+        val other = event(1, "2026-10-25T14:00", "2026-10-25T15:00")
+        val next = ReminderPlanner.planEvents(listOf(other), emptyMap(), AppSettings(), emptySet(), emptyList(), Berlin)
+        assertFalse(next[0].muteKey == warnings[0].muteKey)
+        val test = Reminder(key = "test:1", kind = ReminderKind.EVENT, triggerAt = 0L, title = "Test")
+        assertFalse(test.canMute)
+    }
+
+    @Test
     fun calendarRemindersCanBeIgnored() {
         val e = event(1, "2026-10-24T14:00", "2026-10-24T15:00")
         val result = ReminderPlanner.planEvents(

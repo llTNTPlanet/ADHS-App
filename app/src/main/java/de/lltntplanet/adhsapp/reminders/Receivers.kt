@@ -40,7 +40,7 @@ class AlarmReceiver : BroadcastReceiver() {
     }
 }
 
-/** Knöpfe in der Benachrichtigung: Schlummern, Erledigt, OK. */
+/** Knöpfe in der Benachrichtigung: Schlummern, Erledigt, Keine weiteren, OK. */
 class ReminderActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) = runAsync(context) { app ->
         val c = app.container
@@ -50,6 +50,7 @@ class ReminderActionReceiver : BroadcastReceiver() {
         when (intent.action) {
             ACTION_SNOOZE -> c.reminderEngine.snooze(reminder, intent.getIntExtra(EXTRA_MINUTES, 10))
             ACTION_DONE -> reminder.refId?.let { c.tasks.setDone(it, true) }
+            ACTION_MUTE -> c.reminderEngine.mute(reminder)
             ACTION_DISMISS -> Unit
         }
     }
@@ -58,6 +59,7 @@ class ReminderActionReceiver : BroadcastReceiver() {
         const val ACTION_SNOOZE = "de.lltntplanet.adhsapp.action.SNOOZE"
         const val ACTION_DONE = "de.lltntplanet.adhsapp.action.DONE"
         const val ACTION_DISMISS = "de.lltntplanet.adhsapp.action.DISMISS"
+        const val ACTION_MUTE = "de.lltntplanet.adhsapp.action.MUTE"
         private const val EXTRA_REMINDER = "reminder"
         private const val EXTRA_MINUTES = "minutes"
 

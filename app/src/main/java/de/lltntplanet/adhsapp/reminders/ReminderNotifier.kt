@@ -77,6 +77,9 @@ class ReminderNotifier(private val context: Context) {
                 if (r.kind == ReminderKind.TASK && r.refId != null) {
                     builder.addAction(0, "Erledigt", ReminderActionReceiver.pendingIntent(context, ReminderActionReceiver.ACTION_DONE, r))
                 }
+                if (r.canMute) {
+                    builder.addAction(0, "Keine weiteren", ReminderActionReceiver.pendingIntent(context, ReminderActionReceiver.ACTION_MUTE, r))
+                }
                 builder.addAction(0, "OK", ReminderActionReceiver.pendingIntent(context, ReminderActionReceiver.ACTION_DISMISS, r))
                 if (index == 0) builder.setFullScreenIntent(activityIntent(reminders, FULL_SCREEN_REQUEST), true)
                 nm.notify(r.notificationId, builder.build())

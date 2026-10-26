@@ -25,6 +25,7 @@ object ReminderPlanner {
         zone: ZoneId,
     ): List<Reminder> = events.flatMap { e ->
         if (e.canceled || e.declined || e.calendarId in excludedCalendars) return@flatMap emptyList()
+        if (isIgnoredTitle(e.title, settings.ignoredEventTitles)) return@flatMap emptyList()
         if (e.allDay) {
             if (!settings.allDayReminders) return@flatMap emptyList()
             val date = e.startDate(zone)
@@ -62,6 +63,12 @@ object ReminderPlanner {
                     )
                 }
         }
+    }
+
+    /** Termine wie „Frühstück“ oder „Mittagessen“, an die der Nutzer nicht erinnert werden will. */
+    internal fun isIgnoredTitle(title: String, ignored: Set<String>): Boolean {
+        val t = title.trim()
+        return ignored.any { it.trim().equals(t, ignoreCase = true) }
     }
 
     /** Ganztägige Termine wie "Annas Geburtstag" werden schon von der Geburtstagserinnerung abgedeckt. */
