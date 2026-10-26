@@ -77,7 +77,8 @@ class GeminiFoodVisionClient(
                         // Erste Zeitüberschreitung: oft hängt nur eine alte, still getrennte Verbindung aus dem Pool.
                         // Pool leeren und dasselbe Modell einmal über eine frische Verbindung probieren.
                         retriedFreshConnection = true
-                        client.connectionPool.evictAll()
+                        // Schließt Sockets und darf deshalb nicht auf dem Haupt-Thread laufen (NetworkOnMainThreadException).
+                        withContext(Dispatchers.IO) { client.connectionPool.evictAll() }
                         attempts += "$model: keine Antwort nach $secs s, neuer Versuch mit frischer Verbindung"
                         continue
                     }
