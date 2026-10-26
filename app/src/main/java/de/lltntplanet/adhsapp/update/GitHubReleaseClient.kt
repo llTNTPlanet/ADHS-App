@@ -2,6 +2,7 @@ package de.lltntplanet.adhsapp.update
 
 import de.lltntplanet.adhsapp.data.google.GoogleJson
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
@@ -10,8 +11,12 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.IOException
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLException
 
 @Serializable
 data class GitHubRelease(
@@ -50,6 +55,12 @@ data class UpdateInfo(
 /** Fehler beim Abfragen von GitHub, mit verständlicher Meldung. */
 class UpdateCheckException(message: String, val code: Int = 0) : IOException(message)
 
+/** GitHub war gar nicht erreichbar (kein Netz, DNS, Zeitüberschreitung, TLS) – mit verständlicher Meldung. */
+class UpdateNetworkException(message: String, cause: IOException) : IOException(message, cause) {
+    /** Der Hostname konnte nicht aufgelöst werden – typisch für "kein Internet" oder ein Netz, das GitHub blockiert. */
+    val hostUnresolved: Boolean get() = cause is UnknownHostException
+}
+
 /**
  * Liest das neueste Release eines GitHub-Repositorys. Für private Repos ist ein Token
  * (fine-grained, nur "Contents: Read") nötig.
@@ -68,7 +79,7 @@ class GitHubReleaseClient(
             .header("X-GitHub-Api-Version", "2022-11-28")
             .apply { if (!token.isNullOrBlank()) header("Authorization", "Bearer ${token.trim()}") }
             .build()
-        client.newCall(request).execute().use { response ->
+        executeWithRetry(request).use { response ->
             val text = response.body?.string().orEmpty()
             when {
                 response.isSuccessful -> GoogleJson.decodeFromString<GitHubRelease>(text)
@@ -102,7 +113,7 @@ class GitHubReleaseClient(
                 .apply { if (!token.isNullOrBlank()) header("Authorization", "Bearer ${token.trim()}") }
                 .build()
             val digest = MessageDigest.getInstance("SHA-256")
-            client.newCall(request).execute().use { response ->
+            executeWithRetry(request).use { response ->
                 if (!response.isSuccessful) throw UpdateCheckException("Download fehlgeschlagen (${response.code}).", response.code)
                 val body = response.body ?: throw UpdateCheckException("Download fehlgeschlagen (leere Antwort).")
                 val total = body.contentLength().takeIf { it > 0 } ?: info.apkSize
@@ -134,7 +145,45 @@ class GitHubReleaseClient(
             target
         }
 
+    /**
+     * Führt die Anfrage aus. Scheitert die Namensauflösung (z. B. direkt nach dem WLAN-Wechsel),
+     * wird nach kurzer Pause einmal neu versucht; danach gibt es eine verständliche Meldung statt
+     * der Systemmeldung "Unable to resolve host".
+     */
+    private suspend fun executeWithRetry(request: Request): okhttp3.Response {
+        var attempt = 0
+        while (true) {
+            try {
+                return client.newCall(request).execute()
+            } catch (e: IOException) {
+                if (e is UnknownHostException && attempt < DNS_RETRIES) {
+                    attempt++
+                    delay(DNS_RETRY_DELAY_MS)
+                    continue
+                }
+                throw UpdateNetworkException(networkMessage(e), e)
+            }
+        }
+    }
+
     companion object {
+        private const val DNS_RETRIES = 1
+        private const val DNS_RETRY_DELAY_MS = 1500L
+
+        internal fun networkMessage(e: IOException): String = when (e) {
+            is UnknownHostException ->
+                "GitHub (api.github.com) ist nicht erreichbar – der Name kann nicht aufgelöst werden. " +
+                    "Meist fehlt die Internetverbindung, oder das Netz blockiert GitHub (privates DNS, VPN, " +
+                    "Schul- oder Firmen-WLAN). Bitte mit mobilen Daten oder einem anderen WLAN erneut versuchen."
+            is SocketTimeoutException ->
+                "Zeitüberschreitung – GitHub hat nicht rechtzeitig geantwortet. Internetverbindung prüfen und erneut versuchen."
+            is ConnectException ->
+                "Verbindung zu GitHub nicht möglich (${e.message ?: "abgelehnt"}). Internetverbindung oder VPN prüfen."
+            is SSLException ->
+                "Sichere Verbindung zu GitHub nicht möglich. Datum und Uhrzeit des Geräts prüfen oder VPN ausschalten."
+            else -> "Netzwerkfehler: ${e.message ?: e.javaClass.simpleName}"
+        }
+
         private val VERSION_CODE = Regex("""versionCode:\s*(\d+)""")
         private val HTML_COMMENT = Regex("""<!--.*?-->""", RegexOption.DOT_MATCHES_ALL)
 

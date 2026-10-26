@@ -1,6 +1,8 @@
 package de.lltntplanet.adhsapp.update
 
 import kotlinx.coroutines.test.runTest
+import okhttp3.Dns
+import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okio.Buffer
@@ -14,7 +16,10 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.net.InetAddress
+import java.net.UnknownHostException
 import java.security.MessageDigest
+import java.util.concurrent.TimeUnit
 
 class GitHubReleaseClientTest {
     @get:Rule
@@ -128,4 +133,53 @@ class GitHubReleaseClientTest {
         }
         assertFalse(target.exists())
     }
+
+    private fun clientWithDns(dns: Dns) = GitHubReleaseClient(
+        client = OkHttpClient.Builder().dns(dns).connectTimeout(5, TimeUnit.SECONDS).build(),
+        apiBase = server.url("/").toString(),
+    )
+
+    @Test
+    fun retriesOnceWhenHostCannotBeResolved() = runTest {
+        var lookups = 0
+        val flakyDns = object : Dns {
+            override fun lookup(hostname: String): List<InetAddress> {
+                if (lookups++ == 0) throw UnknownHostException("Unable to resolve host \"$hostname\"")
+                return Dns.SYSTEM.lookup(hostname)
+            }
+        }
+        server.enqueue(MockResponse().setBody(GoogleJsonFixture.release()))
+        val release = clientWithDns(flakyDns).latestRelease("x", "y", null)
+        assertEquals("v1.0.6", release.tagName)
+        assertEquals(2, lookups)
+    }
+
+    @Test
+    fun unresolvableHostGivesReadableMessage() = runTest {
+        val deadDns = object : Dns {
+            override fun lookup(hostname: String): List<InetAddress> =
+                throw UnknownHostException("Unable to resolve host \"$hostname\"")
+        }
+        try {
+            clientWithDns(deadDns).latestRelease("x", "y", null)
+            fail("Exception erwartet")
+        } catch (e: UpdateNetworkException) {
+            assertTrue(e.hostUnresolved)
+            assertTrue(e.message!!.contains("api.github.com"))
+            assertTrue(e.message!!.contains("mobilen Daten"))
+        }
+    }
+
+    @Test
+    fun timeoutGivesReadableMessage() {
+        val message = GitHubReleaseClient.networkMessage(java.net.SocketTimeoutException("timeout"))
+        assertTrue(message.contains("Zeitüberschreitung"))
+    }
+}
+
+private object GoogleJsonFixture {
+    fun release(): String = """
+        {"tag_name":"v1.0.6","body":"<!-- versionCode: 7 -->\\nNeu","draft":false,"prerelease":false,
+         "assets":[{"id":1,"name":"adhs-app.apk","size":10,"url":"https://api.github.com/assets/1"}]}
+    """.trimIndent()
 }
