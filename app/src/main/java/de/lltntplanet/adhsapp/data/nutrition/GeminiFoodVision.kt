@@ -39,6 +39,8 @@ class GeminiFoodVisionClient(
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
+        // Erkennt eine still getrennte HTTP/2-Verbindung (Mobilfunk, Router), bevor eine Anfrage darauf hängen bleibt.
+        .pingInterval(10, TimeUnit.SECONDS)
         .build(),
 ) : FoodRecognizer {
     override val configured: Boolean get() = !apiKey().isNullOrBlank()
@@ -53,27 +55,44 @@ class GeminiFoodVisionClient(
         val key = apiKey()?.takeIf { it.isNotBlank() }
             ?: throw FoodVisionException(0, "Kein Gemini-API-Schlüssel hinterlegt. Trage ihn in den Einstellungen unter „Ernährung“ ein.")
         var lastError: FoodVisionException? = null
+        val attempts = mutableListOf<String>()
+        var retriedFreshConnection = false
         for (model in MODELS) {
             val body = buildRequest(imageBase64, userText, model)
-            val (code, text) = try {
-                withContext(Dispatchers.IO) {
-                    val request = Request.Builder()
-                        .url("$baseUrl/models/$model:generateContent")
-                        .header("x-goog-api-key", key)
-                        .header("content-type", "application/json")
-                        .post(body.toRequestBody(JSON))
-                        .build()
-                    client.newCall(request).execute().use { it.code to it.body?.string().orEmpty() }
+            while (true) {
+                val started = System.nanoTime()
+                val (code, text) = try {
+                    withContext(Dispatchers.IO) {
+                        val request = Request.Builder()
+                            .url("$baseUrl/models/$model:generateContent")
+                            .header("x-goog-api-key", key)
+                            .header("content-type", "application/json")
+                            .post(body.toRequestBody(JSON))
+                            .build()
+                        client.newCall(request).execute().use { it.code to it.body?.string().orEmpty() }
+                    }
+                } catch (e: java.io.IOException) {
+                    val secs = (System.nanoTime() - started) / 1_000_000_000
+                    if (e is java.net.SocketTimeoutException && !retriedFreshConnection) {
+                        // Erste Zeitüberschreitung: oft hängt nur eine alte, still getrennte Verbindung aus dem Pool.
+                        // Pool leeren und dasselbe Modell einmal über eine frische Verbindung probieren.
+                        retriedFreshConnection = true
+                        client.connectionPool.evictAll()
+                        attempts += "$model: keine Antwort nach $secs s, neuer Versuch mit frischer Verbindung"
+                        continue
+                    }
+                    attempts += "$model: ${shortNetworkMessage(e)} nach $secs s"
+                    // Zeitüberschreitung oder Netzfehler: nächstes (schnelleres) Modell probieren.
+                    lastError = FoodVisionException(-1, networkMessage(e, attempts))
+                    break
                 }
-            } catch (e: java.io.IOException) {
-                // Zeitüberschreitung oder Netzfehler: nächstes (schnelleres) Modell probieren.
-                lastError = FoodVisionException(-1, networkMessage(e))
-                continue
+                if (code in 200..299) return parseResponse(text)
+                lastError = FoodVisionException(code, errorMessage(code, text))
+                // Modell nicht (mehr) verfügbar oder überlastet → nächstes probieren; alles andere ist endgültig.
+                if (code != 404 && code != 503) throw lastError
+                attempts += "$model: HTTP $code"
+                break
             }
-            if (code in 200..299) return parseResponse(text)
-            lastError = FoodVisionException(code, errorMessage(code, text))
-            // Modell nicht (mehr) verfügbar oder überlastet → nächstes probieren; alles andere ist endgültig.
-            if (code != 404 && code != 503) throw lastError
         }
         throw lastError ?: FoodVisionException(0, "Erkennung fehlgeschlagen")
     }
@@ -81,8 +100,8 @@ class GeminiFoodVisionClient(
     companion object {
         /** Reihenfolge: zuerst das kostenlose Flash-Modell, dann das schnellere Lite-Modell, zuletzt der Alias auf das aktuelle Flash. */
         val MODELS = listOf("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-flash-latest")
-        /** Pro Modell höchstens so lange auf die Antwort warten; danach wird das nächste Modell probiert. */
-        const val READ_TIMEOUT_SECONDS = 45L
+        /** Pro Versuch höchstens so lange auf die Antwort warten; danach wird das nächste Modell probiert. */
+        const val READ_TIMEOUT_SECONDS = 25L
         private val JSON = "application/json".toMediaType()
 
         /** [imageBase64] null → reine Textanfrage (Beschreibung des Essens in [userText]). */
@@ -166,12 +185,21 @@ class GeminiFoodVisionClient(
             return FoodVisionClient.parseRecognition(text)
         }
 
-        internal fun networkMessage(e: java.io.IOException): String = when (e) {
-            is java.net.SocketTimeoutException ->
-                "Zeitüberschreitung – Gemini hat nicht innerhalb von $READ_TIMEOUT_SECONDS Sekunden geantwortet. " +
-                    "Bitte Internetverbindung prüfen und noch einmal versuchen."
-            is java.net.UnknownHostException -> "Keine Internetverbindung – generativelanguage.googleapis.com ist nicht erreichbar."
-            else -> "Netzwerkfehler: ${e.message ?: e.javaClass.simpleName}"
+        internal fun networkMessage(e: java.io.IOException, attempts: List<String> = emptyList()): String {
+            val detail = if (attempts.isEmpty()) "" else " Versuche: ${attempts.joinToString("; ")}."
+            return when (e) {
+                is java.net.SocketTimeoutException ->
+                    "Zeitüberschreitung – die Verbindung steht, aber Gemini hat nicht geantwortet. " +
+                        "Meist ist das Gratis-Kontingent gerade langsam; bitte gleich noch einmal versuchen." + detail
+                is java.net.UnknownHostException -> "Keine Internetverbindung – generativelanguage.googleapis.com ist nicht erreichbar." + detail
+                else -> "Netzwerkfehler: ${e.message ?: e.javaClass.simpleName}." + detail
+            }
+        }
+
+        private fun shortNetworkMessage(e: java.io.IOException): String = when (e) {
+            is java.net.SocketTimeoutException -> "keine Antwort"
+            is java.net.UnknownHostException -> "Server nicht erreichbar"
+            else -> e.message ?: e.javaClass.simpleName
         }
 
         private fun errorMessage(code: Int, body: String): String {
