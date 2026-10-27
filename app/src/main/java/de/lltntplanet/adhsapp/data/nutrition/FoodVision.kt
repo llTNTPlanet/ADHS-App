@@ -39,6 +39,8 @@ data class FoodRecognition(
     val mealGuess: MealType? = null,
     /** Kurzer Hinweis, z. B. "Nährwerte von der Packung gelesen, Portion geschätzt". */
     val note: String = "",
+    /** Welches Modell geantwortet hat (zur Diagnose in „Verbindung testen“); null beim Chat-Weg. */
+    val model: String? = null,
 ) {
     val totalKcal: Int get() = items.sumOf { it.kcal }
 }

@@ -136,7 +136,7 @@ fun FoodVisionSettings(settings: AppSettings, update: ((AppSettings) -> AppSetti
                         testResult = runCatching { container.foodVision.analyzeText("1 Apfel") }.fold(
                             onSuccess = { r ->
                                 val secs = (System.currentTimeMillis() - started) / 1000.0
-                                "Verbindung OK (${"%.1f".format(secs)} s): " +
+                                "Verbindung OK (${"%.1f".format(secs)} s" + (r.model?.let { ", $it" } ?: "") + "): " +
                                     (r.items.firstOrNull()?.let { "${it.name} ≈ ${it.kcal} kcal" } ?: "keine Einträge, aber Antwort erhalten")
                             },
                             onFailure = { "Fehler: ${it.message ?: it.javaClass.simpleName}" },
