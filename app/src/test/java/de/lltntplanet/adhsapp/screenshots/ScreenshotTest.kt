@@ -201,6 +201,12 @@ class ScreenshotTest {
             shot("09-gesundheit")
             clickTab("nutrition")
             shot("10-ernaehrung")
+            // Untere Leiste auf vier Seiten begrenzen – der Rest liegt unter „Weitere“.
+            runBlocking { app.container.settings.update { it.copy(barTabs = setOf("today", "calendar", "tasks", "routines")) } }
+            clickTab("today")
+            clickTab("more")
+            shot("14-weitere")
+            runBlocking { app.container.settings.update { it.copy(barTabs = emptySet()) } }
         }
     }
 
