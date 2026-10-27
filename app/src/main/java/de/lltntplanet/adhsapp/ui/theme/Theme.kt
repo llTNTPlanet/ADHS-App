@@ -19,6 +19,8 @@ object AppColors {
     val NowRed = Color(0xFFEA4335)
     val Birthday = Color(0xFFC2185B)
     val Task = Color(0xFF188038)
+    val Medication = Color(0xFF6D28D9)
+    val Routine = Color(0xFFD97706)
     val Health = Color(0xFF00897B)
     val Sleep = Color(0xFF5C6BC0)
     val Warning = Color(0xFFF9AB00)

@@ -7,17 +7,18 @@ Dazu: dein **Google Kalender** im gewohnten Google-Look und deine **Google-Healt
 |---|---|---|---|
 | ![Heute](docs/screenshots/02-heute.png) | ![Terminübersicht](docs/screenshots/03-kalender-terminuebersicht.png) | ![Woche](docs/screenshots/04-kalender-woche.png) | ![Vollbild](docs/screenshots/11-vollbild-termin.png) |
 
-| Aufgaben | Geburtstage | Gesundheit | Einrichtung |
+| Aufgaben | Routinen & Medikamente | Geburtstage | Gesundheit |
 |---|---|---|---|
-| ![Aufgaben](docs/screenshots/07-aufgaben.png) | ![Geburtstage](docs/screenshots/08-geburtstage.png) | ![Gesundheit](docs/screenshots/09-gesundheit.png) | ![Einrichtung](docs/screenshots/01-einrichtung.png) |
+| ![Aufgaben](docs/screenshots/07-aufgaben.png) | ![Routinen](docs/screenshots/13-routinen.png) | ![Geburtstage](docs/screenshots/08-geburtstage.png) | ![Gesundheit](docs/screenshots/09-gesundheit.png) |
 
-Weitere Bilder: [Essen](docs/screenshots/10-ernaehrung.png), [Monat](docs/screenshots/06-kalender-monat.png), [3 Tage](docs/screenshots/05-kalender-3-tage.png), [Vollbild Aufgabe](docs/screenshots/12-vollbild-aufgabe.png).
+Weitere Bilder: [Einrichtung](docs/screenshots/01-einrichtung.png), [Essen](docs/screenshots/10-ernaehrung.png), [Monat](docs/screenshots/06-kalender-monat.png), [3 Tage](docs/screenshots/05-kalender-3-tage.png), [Vollbild Aufgabe](docs/screenshots/12-vollbild-aufgabe.png).
 
 ## Was die App kann
 
 **Heute** – der Startbildschirm gegen Zeitblindheit
 - „Als Nächstes“ mit großem Countdown („In 1 Std. 11 Min.“) und „Jetzt“-Anzeige mit Fortschrittsbalken
-- Termine von heute, Aufgaben für heute (mit Schnell-Eingabe), Geburtstage der nächsten 14 Tage, Schritte und Schlaf
+- Termine von heute, die nächsten zwei Routinen/Medikamente zum Abhaken, Aufgaben für heute (mit Schnell-Eingabe),
+  Geburtstage der nächsten 14 Tage, Schritte und Schlaf
 
 **Kalender** – im Stil von Google Kalender
 - Ansichten: Terminübersicht, Tag, 3 Tage, Woche, Monat (wischen zum Blättern, „Heute“-Knopf, Datumsauswahl)
@@ -35,9 +36,17 @@ Weitere Bilder: [Essen](docs/screenshots/10-ernaehrung.png), [Monat](docs/screen
 - „Keine weiteren Erinnerungen zu diesem Termin“ im Vollbild und in der Benachrichtigung: unterdrückt alle weiteren
   Vorwarnungen und Schlummer-Wiederholungen dieses Termins für den jeweiligen Tag
 - Geburtstage: am Tag und/oder 1/3/7 Tage vorher (für Geschenke)
-- Aufgaben: zur Fälligkeit; wiederkehrende Aufgaben (täglich, werktags, wöchentlich, monatlich) – ideal für Medikamente
+- Aufgaben: zur Fälligkeit; wiederkehrende Aufgaben (täglich, werktags, wöchentlich, monatlich)
+- Routinen und Medikamente: zu jeder eingetragenen Uhrzeit, mit „Genommen“-Knopf
 - Verpasste Erinnerungen (Handy war aus) kommen nach, solange der Termin noch läuft
 - „Test-Erinnerung in 10 Sekunden“ in Einstellungen und Einrichtung
+
+**Routinen & Medikamente** – wie in MyTherapy
+- Medikamente (mit Dosis) und feste Routinen mit beliebig vielen Uhrzeiten und Wochentagen (täglich, Mo–Fr, einzeln)
+- Tagesliste mit „3 von 5 geschafft“, Abhaken („Genommen“ / „Erledigt“), Überspringen, Pausieren per Schalter
+- Erinnerung zu jeder Uhrzeit im Vollbild und als Benachrichtigung – mit „Genommen“-Knopf direkt darin;
+  schon abgehakte Einnahmen lösen keine Erinnerung mehr aus, verpasste kommen bis zu drei Stunden nach
+- Die nächsten zwei offenen Einträge stehen auf dem Heute-Bildschirm
 
 **Aufgaben**
 - Überfällig / Heute / Morgen / Demnächst / Ohne Datum, Fortschrittsbalken „3 von 5 geschafft“

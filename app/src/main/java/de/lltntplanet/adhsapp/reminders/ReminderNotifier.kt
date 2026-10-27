@@ -74,8 +74,9 @@ class ReminderNotifier(private val context: Context) {
                     .setShowWhen(true)
                     .setContentIntent(activityIntent(listOf(r), r.notificationId))
                     .addAction(0, "10 Min. später", ReminderActionReceiver.pendingIntent(context, ReminderActionReceiver.ACTION_SNOOZE, r, 10))
-                if (r.kind == ReminderKind.TASK && r.refId != null) {
-                    builder.addAction(0, "Erledigt", ReminderActionReceiver.pendingIntent(context, ReminderActionReceiver.ACTION_DONE, r))
+                if ((r.kind == ReminderKind.TASK || r.kind.isRoutine) && r.refId != null) {
+                    val label = if (r.kind == ReminderKind.MEDICATION) "Genommen" else "Erledigt"
+                    builder.addAction(0, label, ReminderActionReceiver.pendingIntent(context, ReminderActionReceiver.ACTION_DONE, r))
                 }
                 if (r.canMute) {
                     builder.addAction(0, "Keine weiteren", ReminderActionReceiver.pendingIntent(context, ReminderActionReceiver.ACTION_MUTE, r))

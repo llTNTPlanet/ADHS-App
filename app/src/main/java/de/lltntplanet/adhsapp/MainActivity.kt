@@ -62,6 +62,7 @@ class MainActivity : ComponentActivity() {
         ReminderKind.TASK.name -> Tab.TASKS
         ReminderKind.BIRTHDAY.name -> Tab.BIRTHDAYS
         ReminderKind.EVENT.name -> Tab.CALENDAR
+        ReminderKind.MEDICATION.name, ReminderKind.ROUTINE.name -> Tab.ROUTINES
         else -> null
     }
 

@@ -21,6 +21,9 @@ import de.lltntplanet.adhsapp.data.db.FoodEntryEntity
 import de.lltntplanet.adhsapp.data.db.MealType
 import de.lltntplanet.adhsapp.data.settings.Sex
 import de.lltntplanet.adhsapp.data.db.Repeat
+import de.lltntplanet.adhsapp.data.db.RoutineEntity
+import de.lltntplanet.adhsapp.data.db.RoutineKind
+import de.lltntplanet.adhsapp.data.db.RoutineLogEntity
 import de.lltntplanet.adhsapp.data.db.TaskEntity
 import de.lltntplanet.adhsapp.data.google.GoogleJson
 import de.lltntplanet.adhsapp.data.health.HealthDay
@@ -107,6 +110,13 @@ class ScreenshotTest {
         dao.insert(TaskEntity(title = "Steuererklärung: Belege sortieren", dueEpochDay = today.plusDays(4).toEpochDay()))
         dao.insert(TaskEntity(title = "Neue Laufschuhe ansehen"))
         dao.insert(TaskEntity(title = "Pflanzen gießen", dueEpochDay = today.toEpochDay(), done = true, doneAt = System.currentTimeMillis()))
+        val routines = c.db.routineDao()
+        routines.upsert(RoutineEntity(name = "Methylphenidat 10 mg", dose = "1 Tablette, mit Wasser", times = "480,840"))
+        routines.upsert(RoutineEntity(name = "Vitamin D", dose = "1 Tropfen", times = "480"))
+        routines.upsert(RoutineEntity(name = "Zähne putzen", kind = RoutineKind.ROUTINE, times = "470,1320"))
+        routines.upsert(RoutineEntity(name = "Spaziergang", kind = RoutineKind.ROUTINE, dose = "20 Minuten", times = "1050", weekdays = 0b0011111))
+        routines.insertLog(RoutineLogEntity(routineId = 2, epochDay = today.toEpochDay(), minutes = 480))
+        routines.insertLog(RoutineLogEntity(routineId = 3, epochDay = today.toEpochDay(), minutes = 470))
         val b = c.db.birthdayDao()
         b.upsert(BirthdayEntity(name = "Anna Schmidt", month = today.plusDays(1).monthValue, day = today.plusDays(1).dayOfMonth, year = 1992))
         b.upsert(BirthdayEntity(name = "Papa", month = today.monthValue, day = today.dayOfMonth, year = 1961))
@@ -183,6 +193,8 @@ class ScreenshotTest {
             shot("06-kalender-monat")
             clickTab("tasks")
             shot("07-aufgaben")
+            clickTab("routines")
+            shot("13-routinen")
             clickTab("birthdays")
             shot("08-geburtstage")
             clickTab("health")

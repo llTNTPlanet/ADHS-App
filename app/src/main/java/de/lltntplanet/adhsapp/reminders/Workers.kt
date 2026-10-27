@@ -28,6 +28,7 @@ class MaintenanceWorker(context: Context, params: WorkerParameters) : CoroutineW
             runCatching { c.tasksSync.sync() }.onFailure { Log.w(TAG, "Google-Tasks-Abgleich fehlgeschlagen", it) }
         }
         c.tasks.purgeOldDone(30L * 24 * 60 * 60 * 1000)
+        c.routines.purgeOldLog(90)
         return Result.success()
     }
 

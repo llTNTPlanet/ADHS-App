@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Cake
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material.icons.filled.WbSunny
@@ -40,6 +41,7 @@ import de.lltntplanet.adhsapp.ui.calendar.EventEditorScreen
 import de.lltntplanet.adhsapp.ui.components.appContainer
 import de.lltntplanet.adhsapp.ui.health.HealthScreen
 import de.lltntplanet.adhsapp.ui.nutrition.NutritionScreen
+import de.lltntplanet.adhsapp.ui.routines.RoutinesScreen
 import de.lltntplanet.adhsapp.ui.settings.SettingsScreen
 import de.lltntplanet.adhsapp.ui.settings.SetupScreen
 import de.lltntplanet.adhsapp.ui.tasks.TasksScreen
@@ -52,6 +54,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
     TODAY("today", "Heute", Icons.Filled.WbSunny),
     CALENDAR("calendar", "Kalender", Icons.Filled.CalendarMonth),
     TASKS("tasks", "Aufgaben", Icons.Filled.TaskAlt),
+    ROUTINES("routines", "Routinen", Icons.Filled.Medication),
     BIRTHDAYS("birthdays", "Geburtstage", Icons.Filled.Cake),
     HEALTH("health", "Gesundheit", Icons.Filled.Favorite),
     NUTRITION("nutrition", "Essen", Icons.Filled.Restaurant),
@@ -100,7 +103,7 @@ fun AppRoot(requestedTab: Tab?, onTabHandled: () -> Unit) {
                             selected = route == tab.route,
                             onClick = { nav.openTab(tab) },
                             icon = { Icon(tab.icon, contentDescription = null) },
-                            label = { Text(tab.label, maxLines = 1, softWrap = false, fontSize = 10.sp) },
+                            label = { Text(tab.label, maxLines = 1, softWrap = false, fontSize = 9.sp, letterSpacing = 0.sp) },
                             modifier = Modifier.testTag("tab-${tab.route}"),
                         )
                     }
@@ -119,6 +122,7 @@ fun AppRoot(requestedTab: Tab?, onTabHandled: () -> Unit) {
                     onOpenSetup = { nav.navigate("setup") },
                     onOpenCalendar = { nav.openTab(Tab.CALENDAR) },
                     onOpenTasks = { nav.openTab(Tab.TASKS) },
+                    onOpenRoutines = { nav.openTab(Tab.ROUTINES) },
                     onOpenBirthdays = { nav.openTab(Tab.BIRTHDAYS) },
                     onOpenHealth = { nav.openTab(Tab.HEALTH) },
                     onEditEvent = { nav.navigate("event/edit/$it") },
@@ -132,6 +136,7 @@ fun AppRoot(requestedTab: Tab?, onTabHandled: () -> Unit) {
                 )
             }
             composable(Tab.TASKS.route) { TasksScreen(onOpenSettings = { nav.navigate("settings") }) }
+            composable(Tab.ROUTINES.route) { RoutinesScreen(onOpenSettings = { nav.navigate("settings") }) }
             composable(Tab.BIRTHDAYS.route) { BirthdaysScreen(onOpenSettings = { nav.navigate("settings") }) }
             composable(Tab.HEALTH.route) { HealthScreen(onOpenSettings = { nav.navigate("settings") }) }
             composable(Tab.NUTRITION.route) { NutritionScreen(onOpenSettings = { nav.navigate("settings") }) }

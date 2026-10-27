@@ -6,6 +6,12 @@ enum class ReminderKind(val label: String) {
     EVENT("Termin"),
     BIRTHDAY("Geburtstag"),
     TASK("Aufgabe"),
+    MEDICATION("Medikament"),
+    ROUTINE("Routine"),
+    ;
+
+    /** Routinen und Medikamente werden gleich behandelt (abhaken statt erledigen). */
+    val isRoutine: Boolean get() = this == MEDICATION || this == ROUTINE
 }
 
 /** Eine konkrete Erinnerung zu einem Zeitpunkt. [key] ist pro Vorkommen und Vorlaufzeit eindeutig. */

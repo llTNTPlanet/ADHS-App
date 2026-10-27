@@ -10,6 +10,7 @@ import de.lltntplanet.adhsapp.data.birthdays.BirthdayRepository
 import de.lltntplanet.adhsapp.data.calendar.CalendarRepository
 import de.lltntplanet.adhsapp.data.db.FiredReminderEntity
 import de.lltntplanet.adhsapp.data.db.ReminderDao
+import de.lltntplanet.adhsapp.data.db.RoutineDao
 import de.lltntplanet.adhsapp.data.db.SnoozeEntity
 import de.lltntplanet.adhsapp.data.db.TaskDao
 import de.lltntplanet.adhsapp.data.google.GoogleJson
@@ -30,6 +31,7 @@ class ReminderEngine(
     private val calendar: CalendarRepository,
     private val birthdays: BirthdayRepository,
     private val taskDao: TaskDao,
+    private val routineDao: RoutineDao,
     private val reminderDao: ReminderDao,
     private val settings: SettingsRepository,
 ) {
@@ -63,6 +65,11 @@ class ReminderEngine(
             allBirthdays, s, Dates.toLocalDate(from, zone), Dates.toLocalDate(to, zone), zone,
         )
         result += ReminderPlanner.planTasks(taskDao.open(), s, zone)
+        val fromDay = Dates.toLocalDate(from, zone)
+        val toDay = Dates.toLocalDate(to, zone)
+        result += ReminderPlanner.planRoutines(
+            routineDao.active(), routineDao.log(fromDay.toEpochDay(), toDay.toEpochDay()), fromDay, toDay, zone,
+        )
         result += reminderDao.snoozes().mapNotNull { snooze ->
             runCatching { GoogleJson.decodeFromString<Reminder>(snooze.payload) }.getOrNull()
                 ?.let { it.copy(key = "snooze:${snooze.id}", triggerAt = snooze.triggerAt, snoozed = true, originKey = it.originKey ?: it.key) }
