@@ -77,6 +77,8 @@ data class AppSettings(
     /** Google-Bereiche, die das Cloud-Projekt nicht freigibt – werden bei der Anmeldung weggelassen. */
     val blockedGoogleScopes: Set<String> = emptySet(),
     val onboardingDone: Boolean = false,
+    /** Seiten (Routen) in der unteren Leiste; leer = alle Seiten. Nicht gewählte Seiten stehen unter „Weitere“. */
+    val barTabs: Set<String> = emptySet(),
     /** Neue Versionen von GitHub automatisch herunterladen und installieren. */
     val autoInstallUpdates: Boolean = true,
     val lastUpdateCheck: Long = 0L,
@@ -126,6 +128,7 @@ class SettingsRepository(private val context: Context) {
         val lastTasksSync = longPreferencesKey("last_tasks_sync")
         val blockedGoogleScopes = stringSetPreferencesKey("blocked_google_scopes")
         val onboardingDone = booleanPreferencesKey("onboarding_done")
+        val barTabs = stringSetPreferencesKey("bar_tabs")
         val autoInstallUpdates = booleanPreferencesKey("auto_install_updates")
         val lastUpdateCheck = longPreferencesKey("last_update_check")
         val dismissedUpdateCode = intPreferencesKey("dismissed_update_code")
@@ -181,6 +184,7 @@ class SettingsRepository(private val context: Context) {
             lastTasksSync = this[Keys.lastTasksSync] ?: d.lastTasksSync,
             blockedGoogleScopes = this[Keys.blockedGoogleScopes] ?: d.blockedGoogleScopes,
             onboardingDone = this[Keys.onboardingDone] ?: d.onboardingDone,
+            barTabs = this[Keys.barTabs] ?: d.barTabs,
             autoInstallUpdates = this[Keys.autoInstallUpdates] ?: d.autoInstallUpdates,
             lastUpdateCheck = this[Keys.lastUpdateCheck] ?: d.lastUpdateCheck,
             dismissedUpdateCode = this[Keys.dismissedUpdateCode] ?: d.dismissedUpdateCode,
@@ -232,6 +236,7 @@ class SettingsRepository(private val context: Context) {
         this[Keys.lastTasksSync] = s.lastTasksSync
         this[Keys.blockedGoogleScopes] = s.blockedGoogleScopes
         this[Keys.onboardingDone] = s.onboardingDone
+        this[Keys.barTabs] = s.barTabs
         this[Keys.autoInstallUpdates] = s.autoInstallUpdates
         this[Keys.lastUpdateCheck] = s.lastUpdateCheck
         this[Keys.dismissedUpdateCode] = s.dismissedUpdateCode

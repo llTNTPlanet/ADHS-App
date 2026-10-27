@@ -11,11 +11,7 @@ import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material.icons.filled.WbSunny
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,9 +20,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -40,6 +35,7 @@ import de.lltntplanet.adhsapp.ui.calendar.CalendarScreen
 import de.lltntplanet.adhsapp.ui.calendar.EventEditorScreen
 import de.lltntplanet.adhsapp.ui.components.appContainer
 import de.lltntplanet.adhsapp.ui.health.HealthScreen
+import de.lltntplanet.adhsapp.ui.navigation.AppBottomBar
 import de.lltntplanet.adhsapp.ui.nutrition.NutritionScreen
 import de.lltntplanet.adhsapp.ui.routines.RoutinesScreen
 import de.lltntplanet.adhsapp.ui.settings.SettingsScreen
@@ -76,6 +72,8 @@ fun AppRoot(requestedTab: Tab?, onTabHandled: () -> Unit) {
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route
     val showBar = Tab.entries.any { it.route == route }
+    // Welche Seiten in der Leiste stehen, kommt aus den Einstellungen; bis sie geladen sind, keine Leiste zeichnen.
+    val settings by container.settings.settings.collectAsStateWithLifecycle(initialValue = null)
 
     // Erst navigieren, wenn der NavHost seinen Graphen gesetzt hat (sonst Absturz beim ersten Start).
     val graphReady = backStack != null
@@ -96,18 +94,14 @@ fun AppRoot(requestedTab: Tab?, onTabHandled: () -> Unit) {
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            if (showBar) {
-                NavigationBar {
-                    Tab.entries.forEach { tab ->
-                        NavigationBarItem(
-                            selected = route == tab.route,
-                            onClick = { nav.openTab(tab) },
-                            icon = { Icon(tab.icon, contentDescription = null) },
-                            label = { Text(tab.label, maxLines = 1, softWrap = false, fontSize = 9.sp, letterSpacing = 0.sp) },
-                            modifier = Modifier.testTag("tab-${tab.route}"),
-                        )
-                    }
-                }
+            val s = settings
+            if (showBar && s != null) {
+                AppBottomBar(
+                    settings = s,
+                    currentRoute = route,
+                    onOpenTab = { nav.openTab(it) },
+                    onSaveBarTabs = { chosen -> scope.launch { container.settings.update { it.copy(barTabs = chosen) } } },
+                )
             }
         },
     ) { padding ->

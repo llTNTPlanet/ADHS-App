@@ -11,7 +11,7 @@ Dazu: dein **Google Kalender** im gewohnten Google-Look und deine **Google-Healt
 |---|---|---|---|
 | ![Aufgaben](docs/screenshots/07-aufgaben.png) | ![Routinen](docs/screenshots/13-routinen.png) | ![Geburtstage](docs/screenshots/08-geburtstage.png) | ![Gesundheit](docs/screenshots/09-gesundheit.png) |
 
-Weitere Bilder: [Einrichtung](docs/screenshots/01-einrichtung.png), [Essen](docs/screenshots/10-ernaehrung.png), [Monat](docs/screenshots/06-kalender-monat.png), [3 Tage](docs/screenshots/05-kalender-3-tage.png), [Vollbild Aufgabe](docs/screenshots/12-vollbild-aufgabe.png).
+Weitere Bilder: [Einrichtung](docs/screenshots/01-einrichtung.png), [Essen](docs/screenshots/10-ernaehrung.png), [Monat](docs/screenshots/06-kalender-monat.png), [3 Tage](docs/screenshots/05-kalender-3-tage.png), [Vollbild Aufgabe](docs/screenshots/12-vollbild-aufgabe.png), [Leiste mit „Weitere“](docs/screenshots/14-weitere.png).
 
 ## Was die App kann
 
@@ -58,6 +58,10 @@ Weitere Bilder: [Einrichtung](docs/screenshots/01-einrichtung.png), [Essen](docs
   oder „Geburtstag von Ben (1990)“) und aus deinen **Google-Kontakten**, zusätzlich eigene Einträge; Alter wird
   angezeigt, Dubletten werden zusammengeführt (Kontakt vor Kalender vor eigenem Eintrag)
 - Erinnert wird pro Geburtstag nur einmal – der Geburtstagskalender löst keine zusätzliche Terminerinnerung aus
+
+**Untere Leiste nach Wunsch**
+- Welche Seiten unten als Symbol stehen, wählst du selbst (Einstellungen → Untere Leiste oder „Weitere → Leiste anpassen“)
+- Alle nicht gewählten Seiten liegen unter dem Symbol „Weitere“ in einer kurzen Liste
 
 **App-Updates direkt aus GitHub**
 - Neue Versionen erscheinen nach jedem Merge auf `main` automatisch als GitHub-Release

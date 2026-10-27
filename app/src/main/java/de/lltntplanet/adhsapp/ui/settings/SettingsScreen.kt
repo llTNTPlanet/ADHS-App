@@ -63,6 +63,8 @@ import de.lltntplanet.adhsapp.ui.components.ColorDot
 import de.lltntplanet.adhsapp.ui.components.TimePickDialog
 import de.lltntplanet.adhsapp.ui.components.appViewModel
 import de.lltntplanet.adhsapp.ui.components.rememberGoogleConnector
+import de.lltntplanet.adhsapp.ui.navigation.BarEditorDialog
+import de.lltntplanet.adhsapp.ui.navigation.barTabs
 import de.lltntplanet.adhsapp.ui.update.UpdateSettingsSection
 import de.lltntplanet.adhsapp.util.Dates
 import de.lltntplanet.adhsapp.util.Permissions
@@ -170,6 +172,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenSetup: () -> Unit) {
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     var showProfile by remember { mutableStateOf(false) }
+    var showBarEditor by remember { mutableStateOf(false) }
     var timePicker by remember { mutableStateOf<String?>(null) }
     val connect = rememberGoogleConnector { feature, result -> vm.onConnect(feature, result) }
     var permissions by remember { mutableStateOf(Permissions.state(context)) }
@@ -412,6 +415,15 @@ fun SettingsScreen(onBack: () -> Unit, onOpenSetup: () -> Unit) {
             de.lltntplanet.adhsapp.ui.nutrition.FoodVisionSettings(s) { f -> vm.update(f) }
             de.lltntplanet.adhsapp.ui.nutrition.HealthConnectSettings(s) { f -> vm.update(f) }
 
+            // Untere Leiste
+            Section("Untere Leiste")
+            ClickSetting("Seiten in der Leiste", "${s.barTabs().size} von ${de.lltntplanet.adhsapp.ui.Tab.entries.size}") { showBarEditor = true }
+            Text(
+                "Wähle, welche Seiten unten als Symbol stehen. Alle anderen findest du dort unter „Weitere“.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
             UpdateSettingsSection()
 
             Section("Über")
@@ -426,6 +438,12 @@ fun SettingsScreen(onBack: () -> Unit, onOpenSetup: () -> Unit) {
         }
     }
 
+    if (showBarEditor) {
+        BarEditorDialog(s, onDismiss = { showBarEditor = false }) { chosen ->
+            vm.update { it.copy(barTabs = chosen) }
+            showBarEditor = false
+        }
+    }
     if (showProfile) {
         de.lltntplanet.adhsapp.ui.nutrition.ProfileDialog(
             settings = s,
