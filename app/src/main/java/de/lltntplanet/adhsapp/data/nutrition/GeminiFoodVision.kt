@@ -54,13 +54,42 @@ class GeminiFoodVisionClient(
     override suspend fun analyzeText(description: String): FoodRecognition =
         request(null, FoodVisionPrompt.descriptionText(description))
 
+    /** Zuletzt bei Google abgefragte Modellliste (Kandidaten in Reihenfolge) und Zeitpunkt der Abfrage. */
+    @Volatile private var cachedModels: Pair<List<String>, Long>? = null
+
+    /**
+     * Welche Modelle probiert werden: Google liefert die Liste der für diesen Schlüssel verfügbaren Modelle
+     * (`GET /models`); daraus werden die bevorzugten in [MODELS]-Reihenfolge genommen und weitere Flash-Modelle
+     * angehängt. Schlägt die Abfrage fehl, bleibt es bei [MODELS]. Die Liste wird eine Stunde zwischengespeichert.
+     */
+    internal suspend fun candidateModels(key: String, forceRefresh: Boolean = false): List<String> {
+        val now = System.currentTimeMillis()
+        cachedModels?.let { (models, at) -> if (!forceRefresh && now - at < MODEL_LIST_TTL_MS) return models }
+        val available = try {
+            withContext(Dispatchers.IO) {
+                val request = Request.Builder()
+                    .url("$baseUrl/models?pageSize=1000")
+                    .header("x-goog-api-key", key)
+                    .get()
+                    .build()
+                client.newCall(request).execute().use { if (it.isSuccessful) parseModelList(it.body?.string().orEmpty()) else null }
+            }
+        } catch (e: java.io.IOException) {
+            null
+        }
+        val models = available?.let { selectModels(it) }?.takeIf { it.isNotEmpty() } ?: MODELS
+        cachedModels = models to now
+        return models
+    }
+
     private suspend fun request(imageBase64: String?, userText: String): FoodRecognition {
         val key = apiKey()?.takeIf { it.isNotBlank() }
             ?: throw FoodVisionException(0, "Kein Gemini-API-Schlüssel hinterlegt. Trage ihn in den Einstellungen unter „Ernährung“ ein.")
         var lastError: FoodVisionException? = null
         val attempts = mutableListOf<String>()
         var retriedFreshConnection = false
-        for (model in MODELS) {
+        val models = candidateModels(key)
+        for (model in models) {
             val body = buildRequest(imageBase64, userText, model)
             var retriedOverload = false
             while (true) {
@@ -91,10 +120,7 @@ class GeminiFoodVisionClient(
                     lastError = FoodVisionException(-1, networkMessage(e, attempts))
                     break
                 }
-                if (code in 200..299) return parseResponse(text)
-                lastError = FoodVisionException(code, errorMessage(code, text, attempts))
-                // Modell nicht (mehr) verfügbar oder überlastet → nächstes probieren; alles andere ist endgültig.
-                if (code != 404 && code != 503) throw lastError
+                if (code in 200..299) return parseResponse(text).copy(model = model)
                 if (code == 503 && !retriedOverload) {
                     // Überlastung ist meist nur kurz: einmal kurz warten und dasselbe Modell noch einmal probieren.
                     retriedOverload = true
@@ -103,18 +129,62 @@ class GeminiFoodVisionClient(
                     continue
                 }
                 attempts += "$model: HTTP $code"
+                lastError = FoodVisionException(code, errorMessage(code, text, attempts))
+                // Modell nicht (mehr) verfügbar oder überlastet → nächstes probieren; alles andere ist endgültig.
+                if (code != 404 && code != 503) throw lastError
                 break
             }
         }
+        // Alle Modelle 404: Die zwischengespeicherte Liste ist offenbar veraltet, beim nächsten Mal neu abfragen.
+        if (lastError?.code == 404) cachedModels = null
         throw lastError ?: FoodVisionException(0, "Erkennung fehlgeschlagen")
     }
 
     companion object {
         /**
-         * Reihenfolge: zuerst das Lite-Modell (seltener überlastet, höheres Gratis-Kontingent, für eine Kalorienschätzung
-         * ausreichend), dann das normale Flash-Modell, zuletzt der Alias auf das aktuelle Flash.
+         * Bevorzugte Modelle in Reihenfolge, alle mit Gratis-Kontingent: zuerst die Lite-Modelle (schnell, selten überlastet,
+         * höheres Kontingent, für eine Kalorienschätzung ausreichend), dann die normalen Flash-Modelle. Die 2.5er-Modelle
+         * stehen nur noch Konten offen, die sie früher schon genutzt haben; neue Schlüssel bekommen dafür 404.
+         * Welche davon es wirklich gibt, fragt [candidateModels] bei Google ab.
          */
-        val MODELS = listOf("gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-flash-latest")
+        val MODELS = listOf(
+            "gemini-3.5-flash-lite",
+            "gemini-3.1-flash-lite",
+            "gemini-3.8-flash",
+            "gemini-3.6-flash",
+            "gemini-2.5-flash-lite",
+            "gemini-2.5-flash",
+        )
+        /** So lange gilt die bei Google abgefragte Modellliste. */
+        const val MODEL_LIST_TTL_MS = 60L * 60 * 1000
+        /** Stabile Text-/Bildmodelle der Flash-Familie, z. B. gemini-3.5-flash-lite oder gemini-4.2-flash (keine Previews, kein TTS/Live/Image). */
+        private val FLASH_MODEL = Regex("""^gemini-(\d+(?:\.\d+)?)-flash(-lite)?$""")
+
+        /** Modellnamen (ohne „models/“-Präfix) aus der Antwort von `GET /models`, nur solche mit generateContent. */
+        internal fun parseModelList(body: String): List<String> =
+            runCatching {
+                GoogleJson.parseToJsonElement(body).jsonObject["models"]?.jsonArray.orEmpty()
+                    .map { it.jsonObject }
+                    .filter { m ->
+                        m["supportedGenerationMethods"]?.jsonArray?.any { it.jsonPrimitive.content == "generateContent" } ?: true
+                    }
+                    .mapNotNull { it["name"]?.jsonPrimitive?.content?.removePrefix("models/") }
+            }.getOrDefault(emptyList())
+
+        /**
+         * Kandidaten aus den verfügbaren Modellen: erst die bevorzugten aus [MODELS] (in deren Reihenfolge), dann weitere
+         * stabile Flash-Modelle (Lite zuerst, neuere Versionen zuerst). Unbekannte oder Spezialmodelle (TTS, Live, Bild) nie.
+         */
+        internal fun selectModels(available: List<String>): List<String> {
+            val set = available.toSet()
+            val preferred = MODELS.filter { it in set }
+            val others = available
+                .filter { it !in preferred }
+                .mapNotNull { name -> FLASH_MODEL.matchEntire(name)?.let { m -> Triple(name, m.groupValues[2].isNotEmpty(), m.groupValues[1].toDoubleOrNull() ?: 0.0) } }
+                .sortedWith(compareByDescending<Triple<String, Boolean, Double>> { it.second }.thenByDescending { it.third })
+                .map { it.first }
+            return preferred + others
+        }
         /** Pro Versuch höchstens so lange auf die Antwort warten; danach wird das nächste Modell probiert. */
         const val READ_TIMEOUT_SECONDS = 25L
         private val JSON = "application/json".toMediaType()
@@ -178,6 +248,7 @@ class GeminiFoodVisionClient(
                     put("responseSchema", schema)
                     put("temperature", 0.2)
                     // Die 2.5er-Modelle „denken“ sonst erst lange nach – für eine Kalorienschätzung unnötig und der Hauptgrund für Zeitüberschreitungen.
+                    // Neuere Modelle steuern das über thinkingLevel; dort bleibt es bei der Voreinstellung (Lite-Modelle: minimal).
                     if ("2.5" in model) putJsonObject("thinkingConfig") { put("thinkingBudget", 0) }
                 }
             }
