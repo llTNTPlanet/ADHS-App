@@ -28,7 +28,8 @@ class GeminiFoodVisionClientTest {
     @After
     fun tearDown() = server.shutdown()
 
-    private fun client(key: String? = "AIza-test") = GeminiFoodVisionClient({ key }, server.url("/v1beta").toString())
+    private fun client(key: String? = "AIza-test") =
+        GeminiFoodVisionClient({ key }, server.url("/v1beta").toString(), overloadRetryDelayMs = 0)
 
     private val answer = """{"items":[{"name":"Müsli","amount":"80 g","kcal":300,"confidence":"hoch"}],"mealGuess":"BREAKFAST","note":"Packung gelesen"}"""
 
@@ -77,6 +78,7 @@ class GeminiFoodVisionClientTest {
         { "AIza-test" },
         server.url("/v1beta").toString(),
         okhttp3.OkHttpClient.Builder().readTimeout(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS).build(),
+        overloadRetryDelayMs = 0,
     )
 
     private fun noResponse() = MockResponse().setSocketPolicy(okhttp3.mockwebserver.SocketPolicy.NO_RESPONSE)
@@ -119,6 +121,43 @@ class GeminiFoodVisionClientTest {
             GeminiFoodVisionClient.MODELS.forEach { assertTrue(e.message!!.contains(it)) }
         }
         assertEquals(GeminiFoodVisionClient.MODELS.size + 1, server.requestCount)
+    }
+
+    private fun overloaded() = MockResponse().setResponseCode(503).setBody("""{"error":{"message":"The model is overloaded. Please try again later."}}""")
+
+    @Test
+    fun liteModelIsTriedFirst() {
+        assertEquals("gemini-2.5-flash-lite", GeminiFoodVisionClient.MODELS[0])
+    }
+
+    @Test
+    fun overloadRetriesSameModelOnceThenFallsBack() = runTest {
+        server.enqueue(overloaded())
+        server.enqueue(ok(answer))
+        assertEquals(300, client().analyzeText("1 Apfel").totalKcal)
+        assertTrue(server.takeRequest().path!!.contains(GeminiFoodVisionClient.MODELS[0]))
+        assertTrue(server.takeRequest().path!!.contains(GeminiFoodVisionClient.MODELS[0]))
+
+        server.enqueue(overloaded())
+        server.enqueue(overloaded())
+        server.enqueue(ok(answer))
+        assertEquals(300, client().analyzeText("1 Apfel").totalKcal)
+        server.takeRequest(); server.takeRequest()
+        assertTrue(server.takeRequest().path!!.contains(GeminiFoodVisionClient.MODELS[1]))
+    }
+
+    @Test
+    fun allModelsOverloadedGivesReadableMessageWithAttempts() = runTest {
+        repeat(GeminiFoodVisionClient.MODELS.size * 2) { server.enqueue(overloaded()) }
+        try {
+            client().analyzeText("1 Apfel")
+            fail("expected 503")
+        } catch (e: FoodVisionException) {
+            assertEquals(503, e.code)
+            assertTrue(e.message!!.contains("überlastet"))
+            GeminiFoodVisionClient.MODELS.forEach { assertTrue(e.message!!.contains(it)) }
+        }
+        assertEquals(GeminiFoodVisionClient.MODELS.size * 2, server.requestCount)
     }
 
     @Test

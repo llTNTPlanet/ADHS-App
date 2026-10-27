@@ -3,6 +3,7 @@ package de.lltntplanet.adhsapp.data.nutrition
 import de.lltntplanet.adhsapp.data.db.MealType
 import de.lltntplanet.adhsapp.data.google.GoogleJson
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -42,6 +43,8 @@ class GeminiFoodVisionClient(
         // Erkennt eine still getrennte HTTP/2-Verbindung (Mobilfunk, Router), bevor eine Anfrage darauf hängen bleibt.
         .pingInterval(10, TimeUnit.SECONDS)
         .build(),
+    /** Wartezeit vor dem einmaligen Wiederholungsversuch, wenn Google „überlastet“ (HTTP 503) meldet. */
+    private val overloadRetryDelayMs: Long = 3_000,
 ) : FoodRecognizer {
     override val configured: Boolean get() = !apiKey().isNullOrBlank()
 
@@ -59,6 +62,7 @@ class GeminiFoodVisionClient(
         var retriedFreshConnection = false
         for (model in MODELS) {
             val body = buildRequest(imageBase64, userText, model)
+            var retriedOverload = false
             while (true) {
                 val started = System.nanoTime()
                 val (code, text) = try {
@@ -88,9 +92,16 @@ class GeminiFoodVisionClient(
                     break
                 }
                 if (code in 200..299) return parseResponse(text)
-                lastError = FoodVisionException(code, errorMessage(code, text))
+                lastError = FoodVisionException(code, errorMessage(code, text, attempts))
                 // Modell nicht (mehr) verfügbar oder überlastet → nächstes probieren; alles andere ist endgültig.
                 if (code != 404 && code != 503) throw lastError
+                if (code == 503 && !retriedOverload) {
+                    // Überlastung ist meist nur kurz: einmal kurz warten und dasselbe Modell noch einmal probieren.
+                    retriedOverload = true
+                    attempts += "$model: überlastet (HTTP 503), neuer Versuch nach ${overloadRetryDelayMs / 1000} s"
+                    delay(overloadRetryDelayMs)
+                    continue
+                }
                 attempts += "$model: HTTP $code"
                 break
             }
@@ -99,8 +110,11 @@ class GeminiFoodVisionClient(
     }
 
     companion object {
-        /** Reihenfolge: zuerst das kostenlose Flash-Modell, dann das schnellere Lite-Modell, zuletzt der Alias auf das aktuelle Flash. */
-        val MODELS = listOf("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-flash-latest")
+        /**
+         * Reihenfolge: zuerst das Lite-Modell (seltener überlastet, höheres Gratis-Kontingent, für eine Kalorienschätzung
+         * ausreichend), dann das normale Flash-Modell, zuletzt der Alias auf das aktuelle Flash.
+         */
+        val MODELS = listOf("gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-flash-latest")
         /** Pro Versuch höchstens so lange auf die Antwort warten; danach wird das nächste Modell probiert. */
         const val READ_TIMEOUT_SECONDS = 25L
         private val JSON = "application/json".toMediaType()
@@ -203,10 +217,15 @@ class GeminiFoodVisionClient(
             else -> e.message ?: e.javaClass.simpleName
         }
 
-        private fun errorMessage(code: Int, body: String): String {
+        private fun errorMessage(code: Int, body: String, attempts: List<String> = emptyList()): String {
             val apiMessage = runCatching {
                 GoogleJson.parseToJsonElement(body).jsonObject["error"]?.jsonObject?.get("message")?.jsonPrimitive?.content
             }.getOrNull()
+            val detail = if (attempts.isEmpty()) "" else " Versuche: ${attempts.joinToString("; ")}."
+            return baseErrorMessage(code, apiMessage) + detail
+        }
+
+        private fun baseErrorMessage(code: Int, apiMessage: String?): String {
             return when {
                 apiMessage?.contains("location is not supported", ignoreCase = true) == true ->
                     "Google bietet die kostenlose Gemini-API in deinem Land nicht an (Standort nicht unterstützt). " +
@@ -220,7 +239,7 @@ class GeminiFoodVisionClient(
                 400, 401, 403 -> "Der Gemini-API-Schlüssel ist ungültig oder nicht freigeschaltet" + (apiMessage?.let { ": $it" } ?: ".")
                 429 -> "Das kostenlose Kontingent ist für den Moment aufgebraucht – bitte eine Minute warten und noch einmal versuchen."
                 404 -> "Das Modell ist nicht verfügbar" + (apiMessage?.let { ": $it" } ?: ".")
-                503 -> "Gemini ist gerade überlastet (HTTP 503). Bitte in einer Minute noch einmal."
+                503 -> "Gemini ist gerade überlastet (HTTP 503), auch nach Wiederholung und Modellwechsel. Bitte in einer Minute noch einmal."
                 in 500..599 -> "Der Erkennungsdienst ist gerade nicht erreichbar (HTTP $code). Bitte später noch einmal."
                 else -> "Erkennung fehlgeschlagen (HTTP $code)" + (apiMessage?.let { ": $it" } ?: "")
             }
