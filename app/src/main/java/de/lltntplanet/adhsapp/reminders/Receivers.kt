@@ -49,7 +49,10 @@ class ReminderActionReceiver : BroadcastReceiver() {
         c.notifier.cancel(reminder)
         when (intent.action) {
             ACTION_SNOOZE -> c.reminderEngine.snooze(reminder, intent.getIntExtra(EXTRA_MINUTES, 10))
-            ACTION_DONE -> reminder.refId?.let { c.tasks.setDone(it, true) }
+            ACTION_DONE -> reminder.refId?.let { id ->
+                if (reminder.kind.isRoutine) c.routines.setDoneAt(id, reminder.targetTime ?: reminder.triggerAt)
+                else c.tasks.setDone(id, true)
+            }
             ACTION_MUTE -> c.reminderEngine.mute(reminder)
             ACTION_DISMISS -> Unit
         }

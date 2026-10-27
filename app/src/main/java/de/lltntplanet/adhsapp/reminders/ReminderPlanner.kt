@@ -3,7 +3,11 @@ package de.lltntplanet.adhsapp.reminders
 import de.lltntplanet.adhsapp.data.birthdays.Birthday
 import de.lltntplanet.adhsapp.data.birthdays.BirthdayMath
 import de.lltntplanet.adhsapp.data.calendar.EventInstance
+import de.lltntplanet.adhsapp.data.db.RoutineEntity
+import de.lltntplanet.adhsapp.data.db.RoutineKind
+import de.lltntplanet.adhsapp.data.db.RoutineLogEntity
 import de.lltntplanet.adhsapp.data.db.TaskEntity
+import de.lltntplanet.adhsapp.data.routines.RoutineLogic
 import de.lltntplanet.adhsapp.data.settings.AppSettings
 import de.lltntplanet.adhsapp.data.tasks.TaskLogic
 import java.time.LocalDate
@@ -131,6 +135,32 @@ object ReminderPlanner {
                 refId = t.id,
             )
         }
+
+    /**
+     * Routinen und Medikamente: eine Erinnerung je Uhrzeit und Tag. Schon abgehakte oder übersprungene
+     * Einnahmen (z. B. vorab genommen) lösen nichts mehr aus. Verpasste kommen bis zu drei Stunden nach.
+     */
+    fun planRoutines(
+        routines: List<RoutineEntity>,
+        log: List<RoutineLogEntity>,
+        from: LocalDate,
+        toInclusive: LocalDate,
+        zone: ZoneId,
+    ): List<Reminder> =
+        RoutineLogic.occurrences(routines, log, from, toInclusive, zone)
+            .filter { !it.done && !it.skipped }
+            .map { o ->
+                Reminder(
+                    key = o.key,
+                    kind = if (o.routine.kind == RoutineKind.MEDICATION) ReminderKind.MEDICATION else ReminderKind.ROUTINE,
+                    triggerAt = o.at,
+                    title = o.routine.name,
+                    detail = o.routine.dose.ifBlank { null },
+                    targetTime = o.at,
+                    targetEnd = o.at + RoutineLogic.CATCH_UP_MILLIS,
+                    refId = o.routine.id,
+                )
+            }
 
     /**
      * Ist die Erinnerung jetzt fällig? Verpasste Erinnerungen (z. B. Handy war aus) kommen noch,

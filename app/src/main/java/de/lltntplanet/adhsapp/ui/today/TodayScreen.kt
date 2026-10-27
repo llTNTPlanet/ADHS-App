@@ -64,7 +64,11 @@ import de.lltntplanet.adhsapp.AppContainer
 import de.lltntplanet.adhsapp.data.birthdays.BirthdayMath
 import de.lltntplanet.adhsapp.data.birthdays.UpcomingBirthday
 import de.lltntplanet.adhsapp.data.calendar.EventInstance
+import de.lltntplanet.adhsapp.data.db.RoutineEntity
+import de.lltntplanet.adhsapp.data.db.RoutineLogEntity
 import de.lltntplanet.adhsapp.data.db.TaskEntity
+import de.lltntplanet.adhsapp.data.routines.RoutineLogic
+import de.lltntplanet.adhsapp.data.routines.RoutineOccurrence
 import de.lltntplanet.adhsapp.data.health.HealthSnapshot
 import de.lltntplanet.adhsapp.data.settings.AppSettings
 import de.lltntplanet.adhsapp.data.tasks.TaskLogic
@@ -75,6 +79,7 @@ import de.lltntplanet.adhsapp.ui.components.EmptyHint
 import de.lltntplanet.adhsapp.ui.components.InfoCard
 import de.lltntplanet.adhsapp.ui.components.SectionTitle
 import de.lltntplanet.adhsapp.ui.components.appViewModel
+import de.lltntplanet.adhsapp.ui.routines.OccurrenceRow
 import de.lltntplanet.adhsapp.ui.tasks.TaskRow
 import de.lltntplanet.adhsapp.ui.theme.AppColors
 import de.lltntplanet.adhsapp.util.Dates
@@ -134,6 +139,26 @@ class TodayViewModel(private val c: AppContainer) : ViewModel() {
         .map { list -> BirthdayMath.upcoming(list, LocalDate.now()).filter { it.daysUntil <= 14 } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    private val routines: StateFlow<List<RoutineEntity>> =
+        c.routines.observeAll().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val routineLog: StateFlow<List<RoutineLogEntity>> = now.map { Dates.toLocalDate(it) }.distinctUntilChanged()
+        .flatMapLatest { d -> c.routines.observeLog(d, d.plusDays(1)) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Die nächsten zwei offenen Routinen / Medikamente (heute und morgen) – wie in MyTherapy. */
+    val nextRoutines: StateFlow<List<RoutineOccurrence>> = combine(routines, routineLog, now) { r, l, n ->
+        RoutineLogic.upcoming(r, l, n, ZoneId.systemDefault(), limit = 2)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Gibt es überhaupt Routinen? Sonst bleibt der Abschnitt auf der Hauptseite weg. */
+    val hasRoutines: StateFlow<Boolean> = routines.map { it.isNotEmpty() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun toggleRoutine(o: RoutineOccurrence) {
+        viewModelScope.launch { c.routines.setDone(o.routine.id, o.date, o.minutes, !(o.done || o.skipped)) }
+    }
+
     val health: StateFlow<HealthSnapshot?> = c.health.snapshot.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /** Nur die Ansicht neu lesen (Kalender, Kontakte). */
@@ -184,6 +209,7 @@ fun TodayScreen(
     onOpenSetup: () -> Unit,
     onOpenCalendar: () -> Unit,
     onOpenTasks: () -> Unit,
+    onOpenRoutines: () -> Unit,
     onOpenBirthdays: () -> Unit,
     onOpenHealth: () -> Unit,
     onEditEvent: (Long) -> Unit,
@@ -196,6 +222,8 @@ fun TodayScreen(
     val tasks by vm.tasks.collectAsStateWithLifecycle()
     val birthdays by vm.birthdays.collectAsStateWithLifecycle()
     val health by vm.health.collectAsStateWithLifecycle()
+    val nextRoutines by vm.nextRoutines.collectAsStateWithLifecycle()
+    val hasRoutines by vm.hasRoutines.collectAsStateWithLifecycle()
     val refreshing by vm.refreshing.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     var permissions by remember { mutableStateOf(Permissions.state(context)) }
@@ -271,6 +299,14 @@ fun TodayScreen(
                         zone = zone,
                         onClick = { selected = e },
                     )
+                }
+            }
+
+            if (hasRoutines) {
+                item { SectionTitle("Routinen & Medikamente", action = { TextButton(onClick = onOpenRoutines) { Text("Alle") } }) }
+                if (nextRoutines.isEmpty()) item { EmptyHint("Alles abgehakt – nichts mehr offen. 💊✅") }
+                items(nextRoutines, key = { it.key }) { o ->
+                    OccurrenceRow(o, now, onToggle = { vm.toggleRoutine(o) }, onClick = onOpenRoutines, today = today, zone = zone, showDay = true)
                 }
             }
 

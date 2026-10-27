@@ -36,6 +36,8 @@ import androidx.compose.material.icons.filled.Cake
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Medication
+import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material3.Button
@@ -171,6 +173,9 @@ class ReminderActivity : ComponentActivity() {
         val id = r.refId
         if (r.kind == ReminderKind.TASK && id != null) {
             container.scope.launch { container.tasks.setDone(id, true) }
+        } else if (r.kind.isRoutine && id != null) {
+            val at = r.targetTime ?: r.triggerAt
+            container.scope.launch { container.routines.setDoneAt(id, at) }
         }
         handled(r)
     }
@@ -220,6 +225,8 @@ private fun kindColor(kind: ReminderKind): Color = when (kind) {
     ReminderKind.EVENT -> AppColors.GoogleBlue
     ReminderKind.BIRTHDAY -> AppColors.Birthday
     ReminderKind.TASK -> AppColors.Task
+    ReminderKind.MEDICATION -> AppColors.Medication
+    ReminderKind.ROUTINE -> AppColors.Routine
 }
 
 @Composable
@@ -260,6 +267,8 @@ private fun AlertScreen(
                             ReminderKind.EVENT -> Icons.Filled.Event
                             ReminderKind.BIRTHDAY -> Icons.Filled.Cake
                             ReminderKind.TASK -> Icons.Filled.TaskAlt
+                            ReminderKind.MEDICATION -> Icons.Filled.Medication
+                            ReminderKind.ROUTINE -> Icons.Filled.Repeat
                         },
                         contentDescription = null,
                         tint = Color.White,
@@ -336,7 +345,7 @@ private fun AlertScreen(
                 // Aktionen – groß und eindeutig
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     val primaryColors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = background)
-                    if (r.kind == ReminderKind.TASK && r.refId != null) {
+                    if ((r.kind == ReminderKind.TASK || r.kind.isRoutine) && r.refId != null) {
                         Button(
                             onClick = onDone,
                             colors = primaryColors,
@@ -344,7 +353,11 @@ private fun AlertScreen(
                         ) {
                             Icon(Icons.Filled.CheckCircle, null)
                             Spacer(Modifier.width(8.dp))
-                            Text("Erledigt", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                if (r.kind == ReminderKind.MEDICATION) "Genommen" else "Erledigt",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
                         }
                     } else {
                         Button(
@@ -386,7 +399,7 @@ private fun AlertScreen(
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         TextButton(onClick = onOpen) { Text("Öffnen", color = Color.White) }
-                        if (r.kind == ReminderKind.TASK && r.refId != null) {
+                        if ((r.kind == ReminderKind.TASK || r.kind.isRoutine) && r.refId != null) {
                             TextButton(onClick = onDismiss) { Text("Nur schließen", color = Color.White) }
                         }
                     }

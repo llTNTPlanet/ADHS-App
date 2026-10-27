@@ -105,3 +105,39 @@ interface FoodDao {
     @Delete
     suspend fun delete(entry: FoodEntryEntity)
 }
+
+@Dao
+interface RoutineDao {
+    @Query("SELECT * FROM routines ORDER BY active DESC, times ASC, name ASC")
+    fun observeAll(): Flow<List<RoutineEntity>>
+
+    @Query("SELECT * FROM routines WHERE active = 1")
+    suspend fun active(): List<RoutineEntity>
+
+    @Query("SELECT * FROM routines WHERE id = :id")
+    suspend fun byId(id: Long): RoutineEntity?
+
+    @Upsert
+    suspend fun upsert(routine: RoutineEntity): Long
+
+    @Delete
+    suspend fun delete(routine: RoutineEntity)
+
+    @Query("SELECT * FROM routine_log WHERE epochDay BETWEEN :fromDay AND :toDay")
+    fun observeLog(fromDay: Long, toDay: Long): Flow<List<RoutineLogEntity>>
+
+    @Query("SELECT * FROM routine_log WHERE epochDay BETWEEN :fromDay AND :toDay")
+    suspend fun log(fromDay: Long, toDay: Long): List<RoutineLogEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLog(entry: RoutineLogEntity): Long
+
+    @Query("DELETE FROM routine_log WHERE routineId = :routineId AND epochDay = :epochDay AND minutes = :minutes")
+    suspend fun deleteLog(routineId: Long, epochDay: Long, minutes: Int)
+
+    @Query("DELETE FROM routine_log WHERE routineId = :routineId")
+    suspend fun deleteLogFor(routineId: Long)
+
+    @Query("DELETE FROM routine_log WHERE epochDay < :beforeDay")
+    suspend fun purgeLog(beforeDay: Long)
+}

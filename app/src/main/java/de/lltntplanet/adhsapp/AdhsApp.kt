@@ -20,6 +20,7 @@ import de.lltntplanet.adhsapp.data.nutrition.FoodVisionRouter
 import de.lltntplanet.adhsapp.data.nutrition.GeminiFoodVisionClient
 import de.lltntplanet.adhsapp.data.nutrition.HealthConnectNutrition
 import de.lltntplanet.adhsapp.data.nutrition.NutritionRepository
+import de.lltntplanet.adhsapp.data.routines.RoutineRepository
 import de.lltntplanet.adhsapp.data.settings.SecretStore
 import de.lltntplanet.adhsapp.data.settings.AppSettings
 import de.lltntplanet.adhsapp.data.settings.SettingsRepository
@@ -80,6 +81,7 @@ class AppContainer(val app: Application) {
     val calendar = CalendarRepository(app)
     val birthdays = BirthdayRepository(app, db.birthdayDao(), calendar, settings)
     val tasks = TaskRepository(db.taskDao()) { requestReschedule() }
+    val routines = RoutineRepository(db.routineDao()) { requestReschedule() }
     val healthConnect = HealthConnectNutrition(app)
     val nutrition = NutritionRepository(db.foodDao(), healthConnect, settings)
 
@@ -89,7 +91,7 @@ class AppContainer(val app: Application) {
     val tasksSync = GoogleTasksSync(GoogleTasksApi(http), db.taskDao(), settings) { requestReschedule() }
 
     val notifier = ReminderNotifier(app)
-    val reminderEngine = ReminderEngine(app, calendar, birthdays, db.taskDao(), db.reminderDao(), settings)
+    val reminderEngine = ReminderEngine(app, calendar, birthdays, db.taskDao(), db.routineDao(), db.reminderDao(), settings)
     val refresher = DataRefresher(settings, health, tasksSync, reminderEngine, scope)
 
     val secrets = SecretStore(app)

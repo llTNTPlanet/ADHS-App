@@ -10,6 +10,7 @@ object ReminderText {
 
     fun headline(r: Reminder): String = when (r.kind) {
         ReminderKind.BIRTHDAY -> "🎂 ${r.title}"
+        ReminderKind.MEDICATION -> "💊 ${r.title}"
         else -> r.title
     }
 
@@ -17,6 +18,8 @@ object ReminderText {
         ReminderKind.EVENT -> r.title
         ReminderKind.TASK -> "Aufgabe: ${r.title}"
         ReminderKind.BIRTHDAY -> "🎂 ${r.title}"
+        ReminderKind.MEDICATION -> "💊 ${r.title}"
+        ReminderKind.ROUTINE -> "Routine: ${r.title}"
     }
 
     fun subtitle(r: Reminder, now: Long = System.currentTimeMillis(), zone: ZoneId = ZoneId.systemDefault()): String {
@@ -25,6 +28,7 @@ object ReminderText {
             ReminderKind.EVENT -> eventSubtitle(r, now, today, zone)
             ReminderKind.TASK -> taskSubtitle(r, now, today, zone)
             ReminderKind.BIRTHDAY -> birthdaySubtitle(r, today, zone)
+            ReminderKind.MEDICATION, ReminderKind.ROUTINE -> routineSubtitle(r, now, today, zone)
         }
     }
 
@@ -51,6 +55,19 @@ object ReminderText {
         else "Jetzt erledigen · fällig ${TimeFormat.relativeDay(day, today).lowercase()} ${TimeFormat.time(due, zone)}"
     }
 
+    private fun routineSubtitle(r: Reminder, now: Long, today: LocalDate, zone: ZoneId): String {
+        val verb = if (r.kind == ReminderKind.MEDICATION) "Einnahme" else "Geplant"
+        val at = r.targetTime ?: return if (r.kind == ReminderKind.MEDICATION) "Jetzt nehmen" else "Jetzt dran"
+        val day = Dates.toLocalDate(at, zone)
+        val dayPrefix = if (day == today) "" else "${TimeFormat.relativeDay(day, today)}, "
+        val dose = r.detail?.let { " · $it" }.orEmpty()
+        return when {
+            at - now >= 60_000L -> "$verb ${TimeFormat.countdown(at, now)} · $dayPrefix${TimeFormat.time(at, zone)}$dose"
+            at < now - 60_000L -> "$verb war um $dayPrefix${TimeFormat.time(at, zone)} · noch offen$dose"
+            else -> "Jetzt · ${TimeFormat.time(at, zone)}$dose"
+        }
+    }
+
     private fun birthdaySubtitle(r: Reminder, today: LocalDate, zone: ZoneId): String {
         val date = r.targetTime?.let { Dates.toLocalDate(it, zone) } ?: today
         val days = Dates.daysBetween(today, date)
@@ -65,7 +82,7 @@ object ReminderText {
     /** Großer Countdown im Vollbild, null wenn nicht sinnvoll. */
     fun bigCountdown(r: Reminder, now: Long): String? {
         val target = r.targetTime ?: return null
-        if (r.allDay || r.kind == ReminderKind.BIRTHDAY) return null
+        if (r.allDay || r.kind == ReminderKind.BIRTHDAY || r.kind.isRoutine) return null
         return TimeFormat.countdown(target, now).replaceFirstChar { it.titlecase(TimeFormat.locale) }
     }
 }

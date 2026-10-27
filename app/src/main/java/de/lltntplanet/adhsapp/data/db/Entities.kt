@@ -84,3 +84,46 @@ data class FoodEntryEntity(
     val amount: String = "",
     val createdAt: Long = System.currentTimeMillis(),
 )
+
+enum class RoutineKind(val label: String) {
+    MEDICATION("Medikament"),
+    ROUTINE("Routine"),
+}
+
+/**
+ * Eine Routine oder ein Medikament mit festen Uhrzeiten (wie in MyTherapy):
+ * z. B. „Methylphenidat 10 mg“ um 8:00 und 14:00 an allen Tagen.
+ */
+@Entity(tableName = "routines")
+data class RoutineEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val kind: RoutineKind = RoutineKind.MEDICATION,
+    /** Dosis bzw. Hinweis, z. B. „1 Tablette“ oder „mit Wasser“. */
+    val dose: String = "",
+    /** Uhrzeiten in Minuten seit Mitternacht, aufsteigend, durch Komma getrennt (z. B. „480,840“). */
+    val times: String,
+    /** Wochentage als Bitmaske: Bit 0 = Montag … Bit 6 = Sonntag; 127 = täglich. */
+    val weekdays: Int = ALL_DAYS,
+    /** Pausiert = keine Erinnerungen, bleibt aber in der Liste. */
+    val active: Boolean = true,
+    val createdAt: Long = System.currentTimeMillis(),
+) {
+    companion object {
+        const val ALL_DAYS = 0b1111111
+    }
+}
+
+/** Eine abgehakte (oder übersprungene) Einnahme / Routine zu einem Zeitpunkt. */
+@Entity(
+    tableName = "routine_log",
+    indices = [Index(value = ["routineId", "epochDay", "minutes"], unique = true), Index(value = ["epochDay"])],
+)
+data class RoutineLogEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val routineId: Long,
+    val epochDay: Long,
+    val minutes: Int,
+    val skipped: Boolean = false,
+    val doneAt: Long = System.currentTimeMillis(),
+)
