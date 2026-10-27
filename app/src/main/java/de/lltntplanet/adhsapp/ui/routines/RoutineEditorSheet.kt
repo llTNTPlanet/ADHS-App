@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -24,6 +25,9 @@ import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -40,6 +44,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -49,16 +54,19 @@ import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import de.lltntplanet.adhsapp.data.db.RoutineEntity
 import de.lltntplanet.adhsapp.data.db.RoutineKind
+import de.lltntplanet.adhsapp.data.routines.Medication
 import de.lltntplanet.adhsapp.data.routines.RoutineLogic
 import de.lltntplanet.adhsapp.data.routines.RoutineOccurrence
 import de.lltntplanet.adhsapp.ui.components.TimePickDialog
 import de.lltntplanet.adhsapp.util.TimeFormat
 import java.time.DayOfWeek
 import java.time.LocalTime
+import kotlinx.coroutines.delay
 
 /** Anlegen / Bearbeiten – Name, Art, Dosis, Uhrzeiten und Wochentage, angelehnt an MyTherapy. */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -68,8 +76,13 @@ fun RoutineEditorSheet(
     onDismiss: () -> Unit,
     onSave: (RoutineEntity) -> Unit,
     onDelete: (() -> Unit)?,
+    /** Vorschläge aus der Medikamenten-Liste zur aktuellen Eingabe. */
+    suggest: suspend (String) -> List<Medication> = { emptyList() },
 ) {
     var name by remember { mutableStateOf(routine?.name.orEmpty()) }
+    var suggestions by remember { mutableStateOf<List<Medication>>(emptyList()) }
+    /** Aus der Liste gewähltes Medikament – dann erscheinen seine üblichen Stärken zum Antippen. */
+    var picked by remember { mutableStateOf<Medication?>(null) }
     var kind by remember { mutableStateOf(routine?.kind ?: RoutineKind.MEDICATION) }
     var dose by remember { mutableStateOf(routine?.dose.orEmpty()) }
     val times = remember { (routine?.let { RoutineLogic.times(it) } ?: listOf(8 * 60)).toMutableStateList() }
@@ -77,6 +90,22 @@ fun RoutineEditorSheet(
     var pickingTime by remember { mutableStateOf<Int?>(null) } // Index in times, -1 = neu
     var confirmDelete by remember { mutableStateOf(false) }
     val valid = name.isNotBlank() && times.isNotEmpty() && weekdays != 0
+
+    // Beim Bearbeiten: Passt der Name zu einem Listeneintrag (z. B. „Medikinet adult 20 mg“)? Dann Stärken anbieten.
+    LaunchedEffect(Unit) {
+        if (routine != null && routine.kind == RoutineKind.MEDICATION) {
+            picked = suggest(routine.name.substringBefore(' ')).filter { routine.name.startsWith(it.name) }.maxByOrNull { it.name.length }
+        }
+    }
+    LaunchedEffect(name, kind) {
+        val p = picked
+        if (kind != RoutineKind.MEDICATION || name.length < 2 || (p != null && name.startsWith(p.name))) {
+            suggestions = emptyList()
+            return@LaunchedEffect
+        }
+        delay(120)
+        suggestions = suggest(name)
+    }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(
@@ -110,10 +139,36 @@ fun RoutineEditorSheet(
                 onValueChange = { name = it },
                 label = { Text(if (kind == RoutineKind.MEDICATION) "Medikament" else "Routine") },
                 placeholder = { Text(if (kind == RoutineKind.MEDICATION) "z. B. Methylphenidat 10 mg" else "z. B. Zähne putzen") },
+                supportingText = if (kind == RoutineKind.MEDICATION && name.isEmpty()) {
+                    { Text("Tipp: Einfach lostippen – Vorschläge aus der Liste gängiger Medikamente (Deutschland).") }
+                } else {
+                    null
+                },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 modifier = Modifier.fillMaxWidth(),
             )
+            if (suggestions.isNotEmpty()) {
+                MedicationSuggestions(suggestions) { m ->
+                    picked = m
+                    name = m.name
+                    suggestions = emptyList()
+                }
+            }
+            picked?.takeIf { kind == RoutineKind.MEDICATION && it.strengths.isNotEmpty() }?.let { m ->
+                Spacer(Modifier.height(8.dp))
+                Text("Stärke", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    m.strengths.forEach { strength ->
+                        val selected = name == "${m.name} $strength"
+                        FilterChip(
+                            selected = selected,
+                            onClick = { name = if (selected) m.name else "${m.name} $strength" },
+                            label = { Text(strength) },
+                        )
+                    }
+                }
+            }
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = dose,
@@ -226,6 +281,37 @@ fun RoutineEditorSheet(
             confirmButton = { TextButton(onClick = { confirmDelete = false; onDelete() }) { Text("Löschen") } },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Abbrechen") } },
         )
+    }
+}
+
+/** Aufklappliste unter dem Namensfeld: Treffer aus der Medikamenten-Liste. */
+@Composable
+private fun MedicationSuggestions(items: List<Medication>, onPick: (Medication) -> Unit) {
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+    ) {
+        Column {
+            items.forEachIndexed { i, m ->
+                if (i > 0) HorizontalDivider()
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { onPick(m) }
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                ) {
+                    Text(m.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        listOf(m.kind.label, m.group).filter { it.isNotBlank() }.joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
     }
 }
 

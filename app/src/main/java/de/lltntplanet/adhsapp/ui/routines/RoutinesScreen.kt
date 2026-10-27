@@ -46,6 +46,7 @@ import androidx.lifecycle.viewModelScope
 import de.lltntplanet.adhsapp.AppContainer
 import de.lltntplanet.adhsapp.data.db.RoutineEntity
 import de.lltntplanet.adhsapp.data.db.RoutineLogEntity
+import de.lltntplanet.adhsapp.data.routines.Medication
 import de.lltntplanet.adhsapp.data.routines.RoutineLogic
 import de.lltntplanet.adhsapp.data.routines.RoutineOccurrence
 import de.lltntplanet.adhsapp.ui.components.EmptyHint
@@ -92,6 +93,9 @@ class RoutinesViewModel(private val c: AppContainer) : ViewModel() {
     val todayList: StateFlow<List<RoutineOccurrence>> = combine(routines, log, today) { r, l, d ->
         RoutineLogic.occurrences(r.orEmpty(), l, d, d, ZoneId.systemDefault())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Vorschläge aus der eingebauten Medikamenten-Liste. */
+    suspend fun suggest(query: String): List<Medication> = c.medications.suggest(query)
 
     fun save(routine: RoutineEntity) {
         viewModelScope.launch { c.routines.save(routine) }
@@ -171,7 +175,13 @@ fun RoutinesScreen(modifier: Modifier = Modifier, onOpenSettings: () -> Unit = {
     }
 
     if (creating) {
-        RoutineEditorSheet(routine = null, onDismiss = { creating = false }, onSave = { vm.save(it); creating = false }, onDelete = null)
+        RoutineEditorSheet(
+            routine = null,
+            onDismiss = { creating = false },
+            onSave = { vm.save(it); creating = false },
+            onDelete = null,
+            suggest = vm::suggest,
+        )
     }
     editing?.let { r ->
         RoutineEditorSheet(
@@ -179,6 +189,7 @@ fun RoutinesScreen(modifier: Modifier = Modifier, onOpenSettings: () -> Unit = {
             onDismiss = { editing = null },
             onSave = { vm.save(it); editing = null },
             onDelete = { vm.delete(r); editing = null },
+            suggest = vm::suggest,
         )
     }
     selected?.let { o ->
