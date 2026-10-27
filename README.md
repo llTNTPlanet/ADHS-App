@@ -43,6 +43,8 @@ Weitere Bilder: [Einrichtung](docs/screenshots/01-einrichtung.png), [Essen](docs
 
 **Routinen & Medikamente** – wie in MyTherapy
 - Medikamente (mit Dosis) und feste Routinen mit beliebig vielen Uhrzeiten und Wochentagen (täglich, Mo–Fr, einzeln)
+- Beim Eintippen eines Medikaments schlägt die App passende Namen aus einer eingebauten Liste gängiger Medikamente in
+  Deutschland vor (Wirkstoffe, Handelsnamen, Nahrungsergänzung – mit Schwerpunkt ADHS) und bietet die üblichen Stärken zum Antippen
 - Tagesliste mit „3 von 5 geschafft“, Abhaken („Genommen“ / „Erledigt“), Überspringen, Pausieren per Schalter
 - Erinnerung zu jeder Uhrzeit im Vollbild und als Benachrichtigung – mit „Genommen“-Knopf direkt darin;
   schon abgehakte Einnahmen lösen keine Erinnerung mehr aus, verpasste kommen bis zu drei Stunden nach

@@ -20,6 +20,7 @@ import de.lltntplanet.adhsapp.data.nutrition.FoodVisionRouter
 import de.lltntplanet.adhsapp.data.nutrition.GeminiFoodVisionClient
 import de.lltntplanet.adhsapp.data.nutrition.HealthConnectNutrition
 import de.lltntplanet.adhsapp.data.nutrition.NutritionRepository
+import de.lltntplanet.adhsapp.data.routines.MedicationCatalog
 import de.lltntplanet.adhsapp.data.routines.RoutineRepository
 import de.lltntplanet.adhsapp.data.settings.SecretStore
 import de.lltntplanet.adhsapp.data.settings.AppSettings
@@ -82,6 +83,8 @@ class AppContainer(val app: Application) {
     val birthdays = BirthdayRepository(app, db.birthdayDao(), calendar, settings)
     val tasks = TaskRepository(db.taskDao()) { requestReschedule() }
     val routines = RoutineRepository(db.routineDao()) { requestReschedule() }
+    /** Eingebaute Liste gängiger Medikamente in Deutschland für Vorschläge beim Eintippen. */
+    val medications = MedicationCatalog(app)
     val healthConnect = HealthConnectNutrition(app)
     val nutrition = NutritionRepository(db.foodDao(), healthConnect, settings)
 
