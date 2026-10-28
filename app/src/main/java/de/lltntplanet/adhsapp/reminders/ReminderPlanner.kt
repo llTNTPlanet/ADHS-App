@@ -69,6 +69,46 @@ object ReminderPlanner {
         }
     }
 
+    /**
+     * Essens-Termine (z. B. „Frühstück“): nach dem Ende eine stille Erinnerung, die Mahlzeit einzutragen.
+     * Unabhängig von den ignorierten Titeln – Essens-Termine lösen typischerweise keine Vorwarnung aus,
+     * sollen aber hinterher ans Eintragen erinnern.
+     */
+    fun planMeals(
+        events: List<EventInstance>,
+        settings: AppSettings,
+        excludedCalendars: Set<Long>,
+    ): List<Reminder> {
+        if (!settings.mealReminders) return emptyList()
+        return events.mapNotNull { e ->
+            if (e.canceled || e.declined || e.allDay || e.calendarId in excludedCalendars) return@mapNotNull null
+            if (!isMealTitle(e.title, settings.mealEventTitles)) return@mapNotNull null
+            val end = if (e.end > e.begin) e.end else e.begin
+            Reminder(
+                key = "meal:${e.eventId}:${e.begin}:${settings.mealReminderMinutesAfter}",
+                kind = ReminderKind.MEAL,
+                triggerAt = end + settings.mealReminderMinutesAfter.coerceAtLeast(0) * 60_000L,
+                title = e.displayTitle,
+                targetTime = e.begin,
+                // Verpasste Erinnerungen (Handy aus) kommen bis zu drei Stunden nach dem Essen noch.
+                targetEnd = end + MEAL_CATCH_UP_MILLIS,
+                refId = e.eventId,
+                color = e.color,
+            )
+        }
+    }
+
+    /** Enthält der Titel eines der Essens-Wörter (als Wort, Groß-/Kleinschreibung egal)? */
+    internal fun isMealTitle(title: String, mealWords: Set<String>): Boolean {
+        val t = title.trim().lowercase()
+        if (t.isEmpty()) return false
+        val words = t.split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotEmpty() }
+        return mealWords.any { w ->
+            val needle = w.trim().lowercase()
+            needle.isNotEmpty() && (t == needle || needle in words)
+        }
+    }
+
     /** Termine wie „Frühstück“ oder „Mittagessen“, an die der Nutzer nicht erinnert werden will. */
     internal fun isIgnoredTitle(title: String, ignored: Set<String>): Boolean {
         val t = title.trim()
@@ -175,6 +215,7 @@ object ReminderPlanner {
         due.groupBy { it.occurrenceKey }.values.map { group -> group.maxBy { it.triggerAt } }.sortedBy { it.triggerAt }
 
     const val GRACE_MILLIS = 15 * 60_000L
+    const val MEAL_CATCH_UP_MILLIS = 3 * 60 * 60_000L
     const val EARLY_MILLIS = 30_000L
 
     private fun at(date: LocalDate, minutesOfDay: Int, zone: ZoneId): Long =

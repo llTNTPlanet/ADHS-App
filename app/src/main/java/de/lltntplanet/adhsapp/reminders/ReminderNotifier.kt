@@ -14,6 +14,7 @@ import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import de.lltntplanet.adhsapp.MainActivity
 import de.lltntplanet.adhsapp.R
 import de.lltntplanet.adhsapp.data.settings.AppSettings
 import de.lltntplanet.adhsapp.util.Permissions
@@ -45,19 +46,28 @@ class ReminderNotifier(private val context: Context) {
                     .build(),
             )
         }
+        val meals = NotificationChannel(
+            CHANNEL_MEALS,
+            context.getString(R.string.channel_meals_name),
+            NotificationManager.IMPORTANCE_DEFAULT,
+        ).apply { description = context.getString(R.string.channel_meals_description) }
         val info = NotificationChannel(
             CHANNEL_INFO,
             context.getString(R.string.channel_info_name),
             NotificationManager.IMPORTANCE_LOW,
         ).apply { description = context.getString(R.string.channel_info_description) }
-        nm.createNotificationChannels(listOf(alerts, info))
+        nm.createNotificationChannels(listOf(alerts, meals, info))
     }
 
     @SuppressLint("MissingPermission")
-    fun show(reminders: List<Reminder>, settings: AppSettings) {
-        if (reminders.isEmpty()) return
+    fun show(all: List<Reminder>, settings: AppSettings) {
+        if (all.isEmpty()) return
         val nm = NotificationManagerCompat.from(context)
         val canNotify = Permissions.notificationsGranted(context)
+        // Stille Erinnerungen (Mahlzeit eintragen) nur als normale Benachrichtigung – nie Vollbild oder Klingeln.
+        val (quiet, reminders) = all.partition { it.kind.isQuiet }
+        if (canNotify) quiet.forEach { nm.notify(it.notificationId, quietNotification(it)) }
+        if (reminders.isEmpty()) return
         if (canNotify) {
             reminders.forEachIndexed { index, r ->
                 val builder = NotificationCompat.Builder(context, CHANNEL_ALERTS)
@@ -98,6 +108,40 @@ class ReminderNotifier(private val context: Context) {
         }
     }
 
+    /** Benachrichtigung „Mahlzeit eintragen“ mit den Knöpfen „Per Foto“ und „Per Chat“. */
+    private fun quietNotification(r: Reminder): android.app.Notification =
+        NotificationCompat.Builder(context, CHANNEL_MEALS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(ReminderText.notificationTitle(r))
+            .setContentText(ReminderText.subtitle(r))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(ReminderText.subtitle(r)))
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setAutoCancel(true)
+            .setColor(r.color ?: DEFAULT_COLOR)
+            .setWhen(r.triggerAt)
+            .setShowWhen(true)
+            .setContentIntent(nutritionIntent(r, null))
+            .addAction(0, "Per Foto", nutritionIntent(r, MainActivity.NUTRITION_ACTION_PHOTO))
+            .addAction(0, "Per Chat", nutritionIntent(r, MainActivity.NUTRITION_ACTION_CHAT))
+            .addAction(0, "Später", ReminderActionReceiver.pendingIntent(context, ReminderActionReceiver.ACTION_SNOOZE, r, 30))
+            .build()
+
+    /** Öffnet die Seite „Essen“; mit [action] startet dort direkt Kamera bzw. Beschreibung. */
+    private fun nutritionIntent(r: Reminder, action: String?): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java)
+            .putExtra(MainActivity.EXTRA_TAB, ReminderKind.MEAL.name)
+            .putExtra(MainActivity.EXTRA_NUTRITION_ACTION, action)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        return PendingIntent.getActivity(
+            context,
+            ("nutrition:${action ?: "open"}:${r.key}").hashCode(),
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+    }
+
     fun cancel(reminder: Reminder) {
         NotificationManagerCompat.from(context).cancel(reminder.notificationId)
     }
@@ -117,6 +161,7 @@ class ReminderNotifier(private val context: Context) {
     companion object {
         private const val TAG = "ReminderNotifier"
         const val CHANNEL_ALERTS = "reminders_fullscreen"
+        const val CHANNEL_MEALS = "meals"
         const val CHANNEL_INFO = "info"
         private const val FULL_SCREEN_REQUEST = 4711
         private const val DEFAULT_COLOR = 0xFF0B57D0.toInt()

@@ -8,7 +8,12 @@ enum class ReminderKind(val label: String) {
     TASK("Aufgabe"),
     MEDICATION("Medikament"),
     ROUTINE("Routine"),
+    /** Nach einem Essens-Termin: ans Eintragen der Mahlzeit erinnern (nur Benachrichtigung, kein Vollbild). */
+    MEAL("Mahlzeit"),
     ;
+
+    /** Stille Erinnerung ohne Vollbild und Klingeln – nur eine normale Benachrichtigung. */
+    val isQuiet: Boolean get() = this == MEAL
 
     /** Routinen und Medikamente werden gleich behandelt (abhaken statt erledigen). */
     val isRoutine: Boolean get() = this == MEDICATION || this == ROUTINE

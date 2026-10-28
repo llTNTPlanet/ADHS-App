@@ -4,6 +4,8 @@
     <string name="share_chat_answer">Kalorien eintragen (ADHS App)</string>
     <string name="channel_reminders_name">Vollbild-Erinnerungen</string>
     <string name="channel_reminders_description">Termine, Geburtstage und Aufgaben – werden über den ganzen Bildschirm angezeigt.</string>
+    <string name="channel_meals_name">Mahlzeit eintragen</string>
+    <string name="channel_meals_description">Nach Essens-Terminen: Erinnerung, die Mahlzeit per Foto oder Chat einzutragen.</string>
     <string name="channel_info_name">Hinweise</string>
     <string name="channel_info_description">Stille Hinweise, z. B. wenn Google neu verbunden werden muss.</string>
 </resources>
