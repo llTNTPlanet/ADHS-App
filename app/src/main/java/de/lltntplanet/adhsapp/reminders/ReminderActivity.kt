@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material3.Button
@@ -227,6 +228,7 @@ private fun kindColor(kind: ReminderKind): Color = when (kind) {
     ReminderKind.TASK -> AppColors.Task
     ReminderKind.MEDICATION -> AppColors.Medication
     ReminderKind.ROUTINE -> AppColors.Routine
+    ReminderKind.MEAL -> AppColors.Routine
 }
 
 @Composable
@@ -269,6 +271,7 @@ private fun AlertScreen(
                             ReminderKind.TASK -> Icons.Filled.TaskAlt
                             ReminderKind.MEDICATION -> Icons.Filled.Medication
                             ReminderKind.ROUTINE -> Icons.Filled.Repeat
+                            ReminderKind.MEAL -> Icons.Filled.Restaurant
                         },
                         contentDescription = null,
                         tint = Color.White,

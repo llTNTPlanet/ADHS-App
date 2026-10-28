@@ -270,6 +270,58 @@ fun SettingsScreen(onBack: () -> Unit, onOpenSetup: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             SwitchSetting(
+                "Nach dem Essen ans Eintragen erinnern",
+                "Normale Benachrichtigung nach Essens-Terminen mit „Per Foto“ und „Per Chat“ – kein Vollbild, kein Klingeln",
+                s.mealReminders,
+            ) { v -> vm.update { it.copy(mealReminders = v) } }
+            if (s.mealReminders) {
+                Label("Wann nach dem Ende des Termins")
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(0, 5, 10, 15, 30).forEach { m ->
+                        FilterChip(
+                            selected = m == s.mealReminderMinutesAfter,
+                            onClick = { vm.update { it.copy(mealReminderMinutesAfter = m) } },
+                            label = { Text(if (m == 0) "Sofort" else "$m Min. später") },
+                        )
+                    }
+                }
+                Label("Essens-Termine erkennen an diesen Wörtern im Titel")
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    s.mealEventTitles.sorted().forEach { title ->
+                        InputChip(
+                            selected = false,
+                            onClick = { vm.update { it.copy(mealEventTitles = it.mealEventTitles - title) } },
+                            label = { Text(title) },
+                            trailingIcon = { Icon(Icons.Filled.Close, "Entfernen", Modifier.size(16.dp)) },
+                        )
+                    }
+                }
+                var newMealTitle by remember { mutableStateOf("") }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = newMealTitle,
+                        onValueChange = { newMealTitle = it },
+                        placeholder = { Text("z. B. Brunch") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    OutlinedButton(
+                        enabled = newMealTitle.isNotBlank(),
+                        onClick = {
+                            val t = newMealTitle.trim()
+                            vm.update { it.copy(mealEventTitles = it.mealEventTitles + t) }
+                            newMealTitle = ""
+                        },
+                    ) { Text("Hinzufügen") }
+                }
+                Text(
+                    "Zählt, wenn eines der Wörter im Termin-Titel vorkommt (z. B. „Frühstück“ oder „Essen mit Anna“). " +
+                        "Die Erinnerung kommt auch, wenn der Termin oben bei „Keine Erinnerung“ steht.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            SwitchSetting(
                 "Ganztägige Termine",
                 "Erinnerung am Tag um ${TimeFormat.minutesOfDay(s.allDayReminderMinutes)} Uhr",
                 s.allDayReminders,

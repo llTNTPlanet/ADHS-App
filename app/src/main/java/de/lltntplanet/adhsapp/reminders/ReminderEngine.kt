@@ -59,6 +59,7 @@ class ReminderEngine(
                 emptyMap()
             }
             result += ReminderPlanner.planEvents(instances, calReminders, s, excluded, allBirthdays, zone)
+            result += ReminderPlanner.planMeals(instances, s, excluded)
         }
 
         result += ReminderPlanner.planBirthdays(

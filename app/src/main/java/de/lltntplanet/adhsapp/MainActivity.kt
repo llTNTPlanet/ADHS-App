@@ -24,6 +24,7 @@ class MainActivity : ComponentActivity() {
             requestedTab = tabFrom(intent)
             showUpdateIfRequested(intent)
             takeSharedText(intent)
+            takeNutritionAction(intent)
         }
         setContent {
             AdhsTheme {
@@ -37,6 +38,15 @@ class MainActivity : ComponentActivity() {
         tabFrom(intent)?.let { requestedTab = it }
         showUpdateIfRequested(intent)
         takeSharedText(intent)
+        takeNutritionAction(intent)
+    }
+
+    /** „Per Foto“ / „Per Chat“ aus der Essens-Erinnerung → Seite „Essen“ startet direkt Kamera bzw. Beschreibung. */
+    private fun takeNutritionAction(intent: Intent?) {
+        val action = intent?.getStringExtra(EXTRA_NUTRITION_ACTION) ?: return
+        intent.removeExtra(EXTRA_NUTRITION_ACTION)
+        (application as AdhsApp).container.nutritionAction.value = action
+        requestedTab = Tab.NUTRITION
     }
 
     /** Antwort einer Chat-App, die per „Teilen“ an die App geschickt wurde → Seite „Essen“ wertet sie aus. */
@@ -63,11 +73,15 @@ class MainActivity : ComponentActivity() {
         ReminderKind.BIRTHDAY.name -> Tab.BIRTHDAYS
         ReminderKind.EVENT.name -> Tab.CALENDAR
         ReminderKind.MEDICATION.name, ReminderKind.ROUTINE.name -> Tab.ROUTINES
+        ReminderKind.MEAL.name -> Tab.NUTRITION
         else -> null
     }
 
     companion object {
         const val EXTRA_TAB = "tab"
         const val EXTRA_SHOW_UPDATE = "show_update"
+        const val EXTRA_NUTRITION_ACTION = "nutrition_action"
+        const val NUTRITION_ACTION_PHOTO = "photo"
+        const val NUTRITION_ACTION_CHAT = "chat"
     }
 }

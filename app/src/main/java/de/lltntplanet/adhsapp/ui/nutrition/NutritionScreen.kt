@@ -92,6 +92,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import de.lltntplanet.adhsapp.AppContainer
+import de.lltntplanet.adhsapp.MainActivity
 import de.lltntplanet.adhsapp.ui.components.SettingsAction
 import de.lltntplanet.adhsapp.data.db.FoodEntryEntity
 import de.lltntplanet.adhsapp.data.db.MealType
@@ -105,6 +106,7 @@ import de.lltntplanet.adhsapp.data.nutrition.NutritionMath
 import de.lltntplanet.adhsapp.data.settings.AppSettings
 import de.lltntplanet.adhsapp.data.settings.Sex
 import de.lltntplanet.adhsapp.ui.components.InfoCard
+import de.lltntplanet.adhsapp.ui.components.appContainer
 import de.lltntplanet.adhsapp.ui.components.appViewModel
 import de.lltntplanet.adhsapp.ui.theme.AppColors
 import de.lltntplanet.adhsapp.util.TimeFormat
@@ -449,6 +451,18 @@ fun NutritionScreen(modifier: Modifier = Modifier, onOpenSettings: () -> Unit = 
     }
     fun startDescribe() {
         if (visionConfigured) showDescribe = true else showApiKey = true
+    }
+    // „Per Foto“ / „Per Chat“ aus der Essens-Erinnerung: direkt Kamera bzw. Beschreibung öffnen.
+    val container = appContainer()
+    LaunchedEffect(Unit) {
+        container.nutritionAction.collect { action ->
+            if (action == null) return@collect
+            container.nutritionAction.value = null
+            when (action) {
+                MainActivity.NUTRITION_ACTION_PHOTO -> if (visionConfigured) startCamera() else showApiKey = true
+                MainActivity.NUTRITION_ACTION_CHAT -> startDescribe()
+            }
+        }
     }
 
     Scaffold(

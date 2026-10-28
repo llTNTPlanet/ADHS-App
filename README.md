@@ -38,6 +38,9 @@ Weitere Bilder: [Einrichtung](docs/screenshots/01-einrichtung.png), [Essen](docs
 - Geburtstage: am Tag und/oder 1/3/7 Tage vorher (für Geschenke)
 - Aufgaben: zur Fälligkeit; wiederkehrende Aufgaben (täglich, werktags, wöchentlich, monatlich)
 - Routinen und Medikamente: zu jeder eingetragenen Uhrzeit, mit „Genommen“-Knopf
+- Nach dem Essen: nach Terminen wie „Frühstück“ oder „Essen mit Anna“ kommt eine **normale Benachrichtigung** (kein
+  Vollbild, kein Klingeln) mit den Knöpfen „Per Foto“ und „Per Chat“, die die Mahlzeit direkt auf der Seite „Essen“
+  erfassen; Wartezeit nach dem Termin-Ende und erkannte Wörter in den Einstellungen anpassbar
 - Verpasste Erinnerungen (Handy war aus) kommen nach, solange der Termin noch läuft
 - „Test-Erinnerung in 10 Sekunden“ in Einstellungen und Einrichtung
 

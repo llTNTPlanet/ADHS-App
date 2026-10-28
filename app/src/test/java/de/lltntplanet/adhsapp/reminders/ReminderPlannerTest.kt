@@ -52,6 +52,41 @@ class ReminderPlannerTest {
     }
 
     @Test
+    fun mealEventsGetQuietReminderAfterTheirEnd() {
+        val events = listOf(
+            event(1, "2026-10-24T08:00", "2026-10-24T08:30", title = "Frühstück"),
+            event(2, "2026-10-24T12:00", "2026-10-24T13:00", title = "Essen mit Anna"),
+            event(3, "2026-10-24T14:00", "2026-10-24T15:00", title = "Zahnarzt"),
+            event(4, "2026-10-24T18:00", "2026-10-24T18:30", title = "Abendessen", calendarId = 9),
+            event(5, "2026-10-24T19:00", "2026-10-24T19:30", title = "Frühstück", declined = true),
+            allDayEvent(6, LocalDate.of(2026, 10, 24), title = "Frühstück"),
+        )
+        val result = ReminderPlanner.planMeals(events, AppSettings(), excludedCalendars = setOf(9L))
+        assertEquals(listOf(1L, 2L), result.map { it.refId })
+        assertEquals(listOf(millis("2026-10-24T08:30"), millis("2026-10-24T13:00")), result.map { it.triggerAt })
+        assertTrue(result.all { it.kind == ReminderKind.MEAL && it.kind.isQuiet && !it.canMute })
+        assertEquals(millis("2026-10-24T08:00"), result[0].targetTime)
+        assertEquals(millis("2026-10-24T08:30") + ReminderPlanner.MEAL_CATCH_UP_MILLIS, result[0].targetEnd)
+
+        val later = ReminderPlanner.planMeals(events.take(1), AppSettings(mealReminderMinutesAfter = 10), emptySet())
+        assertEquals(millis("2026-10-24T08:40"), later[0].triggerAt)
+        assertFalse(later[0].key == result[0].key)
+        assertTrue(ReminderPlanner.planMeals(events, AppSettings(mealReminders = false), emptySet()).isEmpty())
+    }
+
+    @Test
+    fun mealTitleMatchesWholeWordsOnly() {
+        val words = setOf("Frühstück", "Essen")
+        assertTrue(ReminderPlanner.isMealTitle("FRÜHSTÜCK", words))
+        assertTrue(ReminderPlanner.isMealTitle("Essen gehen mit Tom", words))
+        assertTrue(ReminderPlanner.isMealTitle("Tabletten & Frühstück", words))
+        assertFalse(ReminderPlanner.isMealTitle("Mittagessen", words))
+        assertFalse(ReminderPlanner.isMealTitle("Essensplan schreiben", words))
+        assertFalse(ReminderPlanner.isMealTitle("Zahnarzt", words))
+        assertFalse(ReminderPlanner.isMealTitle("Frühstück", emptySet()))
+    }
+
+    @Test
     fun muteKeyCoversAllWarningsOfOneOccurrenceEvenWhenSnoozed() {
         val e = event(1, "2026-10-24T14:00", "2026-10-24T15:00")
         val warnings = ReminderPlanner.planEvents(listOf(e), emptyMap(), AppSettings(), emptySet(), emptyList(), Berlin)

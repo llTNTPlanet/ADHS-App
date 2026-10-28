@@ -106,6 +106,8 @@ class AppContainer(val app: Application) {
     )
     /** Text, der per „Teilen“ aus einer Chat-App an die App geschickt wurde (Kalorien-Antwort); die Seite „Essen“ holt ihn ab. */
     val sharedChatAnswer = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    /** Aktion aus der Essens-Erinnerung („photo“ oder „chat“); die Seite „Essen“ holt sie ab und löscht sie. */
+    val nutritionAction = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
     val updates = UpdateManager(app, settings, secrets, GitHubReleaseClient(), ApkInstaller(app), updateNotifier, scope)
 
     private var rescheduleJob: Job? = null

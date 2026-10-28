@@ -11,6 +11,7 @@ object ReminderText {
     fun headline(r: Reminder): String = when (r.kind) {
         ReminderKind.BIRTHDAY -> "🎂 ${r.title}"
         ReminderKind.MEDICATION -> "💊 ${r.title}"
+        ReminderKind.MEAL -> "🍽️ ${r.title} eintragen"
         else -> r.title
     }
 
@@ -20,6 +21,7 @@ object ReminderText {
         ReminderKind.BIRTHDAY -> "🎂 ${r.title}"
         ReminderKind.MEDICATION -> "💊 ${r.title}"
         ReminderKind.ROUTINE -> "Routine: ${r.title}"
+        ReminderKind.MEAL -> "🍽️ ${r.title} eintragen?"
     }
 
     fun subtitle(r: Reminder, now: Long = System.currentTimeMillis(), zone: ZoneId = ZoneId.systemDefault()): String {
@@ -29,7 +31,15 @@ object ReminderText {
             ReminderKind.TASK -> taskSubtitle(r, now, today, zone)
             ReminderKind.BIRTHDAY -> birthdaySubtitle(r, today, zone)
             ReminderKind.MEDICATION, ReminderKind.ROUTINE -> routineSubtitle(r, now, today, zone)
+            ReminderKind.MEAL -> mealSubtitle(r, today, zone)
         }
+    }
+
+    private fun mealSubtitle(r: Reminder, today: LocalDate, zone: ZoneId): String {
+        val start = r.targetTime ?: return "Was gab es? Per Foto oder Chat eintragen."
+        val day = Dates.toLocalDate(start, zone)
+        val dayPrefix = if (day == today) "" else "${TimeFormat.relativeDay(day, today)}, "
+        return "Was gab es um $dayPrefix${TimeFormat.time(start, zone)} Uhr? Per Foto oder Chat eintragen."
     }
 
     private fun eventSubtitle(r: Reminder, now: Long, today: LocalDate, zone: ZoneId): String {
@@ -82,7 +92,7 @@ object ReminderText {
     /** Großer Countdown im Vollbild, null wenn nicht sinnvoll. */
     fun bigCountdown(r: Reminder, now: Long): String? {
         val target = r.targetTime ?: return null
-        if (r.allDay || r.kind == ReminderKind.BIRTHDAY || r.kind.isRoutine) return null
+        if (r.allDay || r.kind == ReminderKind.BIRTHDAY || r.kind.isRoutine || r.kind.isQuiet) return null
         return TimeFormat.countdown(target, now).replaceFirstChar { it.titlecase(TimeFormat.locale) }
     }
 }
