@@ -17,11 +17,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Medication
+import androidx.compose.material.icons.filled.Mood
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -29,6 +33,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,7 +49,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import de.lltntplanet.adhsapp.AppContainer
+import de.lltntplanet.adhsapp.data.db.MoodEntryEntity
 import de.lltntplanet.adhsapp.data.db.RoutineEntity
+import de.lltntplanet.adhsapp.data.db.RoutineKind
+import de.lltntplanet.adhsapp.data.db.SymptomEntity
 import de.lltntplanet.adhsapp.data.db.RoutineLogEntity
 import de.lltntplanet.adhsapp.data.routines.Medication
 import de.lltntplanet.adhsapp.data.routines.RoutineLogic
@@ -94,6 +102,35 @@ class RoutinesViewModel(private val c: AppContainer) : ViewModel() {
         RoutineLogic.occurrences(r.orEmpty(), l, d, d, ZoneId.systemDefault())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /** Aktive Symptome für den Checkup-Editor. */
+    val symptoms: StateFlow<List<SymptomEntity>> = c.moods.observeSymptoms()
+        .map { list -> list.filter { it.active } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Checkup-Werte der letzten 7 Tage für die kleine Übersichtskarte. */
+    val recentMood: StateFlow<List<MoodEntryEntity>> = today
+        .flatMapLatest { d -> c.moods.observeEntries(d.minusDays(6), d) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Wunsch aus der Erinnerung, einen bestimmten Checkup zu öffnen. */
+    val checkupRequest = c.checkupRequest
+
+    fun clearCheckupRequest() {
+        c.checkupRequest.value = null
+    }
+
+    fun ensureDefaultSymptoms() {
+        viewModelScope.launch { c.moods.ensureDefaults() }
+    }
+
+    fun addSymptom(name: String) {
+        viewModelScope.launch { c.moods.addSymptom(name) }
+    }
+
+    fun removeSymptom(s: SymptomEntity) {
+        viewModelScope.launch { c.moods.removeSymptom(s) }
+    }
+
     /** Vorschläge aus der eingebauten Medikamenten-Liste. */
     suspend fun suggest(query: String): List<Medication> = c.medications.suggest(query)
 
@@ -120,22 +157,58 @@ class RoutinesViewModel(private val c: AppContainer) : ViewModel() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RoutinesScreen(modifier: Modifier = Modifier, onOpenSettings: () -> Unit = {}) {
+fun RoutinesScreen(modifier: Modifier = Modifier, onOpenSettings: () -> Unit = {}, onOpenMoodStats: () -> Unit = {}) {
     val vm = appViewModel { RoutinesViewModel(it) }
     val now by vm.now.collectAsStateWithLifecycle()
     val routines by vm.routines.collectAsStateWithLifecycle()
     val todayList by vm.todayList.collectAsStateWithLifecycle()
+    val symptoms by vm.symptoms.collectAsStateWithLifecycle()
+    val recentMood by vm.recentMood.collectAsStateWithLifecycle()
+    val checkupRequest by vm.checkupRequest.collectAsStateWithLifecycle()
     var editing by remember { mutableStateOf<RoutineEntity?>(null) }
-    var creating by remember { mutableStateOf(false) }
+    var creating by remember { mutableStateOf<RoutineKind?>(null) }
     var selected by remember { mutableStateOf<RoutineOccurrence?>(null) }
+    var checkup by remember { mutableStateOf<RoutineOccurrence?>(null) }
     val zone = remember { ZoneId.systemDefault() }
     val today = Dates.toLocalDate(now, zone)
+    val hasCheckup = routines.orEmpty().any { it.kind == RoutineKind.CHECKUP }
+
+    /** Checkup-Vorkommen: Abhaken heißt ausfüllen – das Blatt mit den Schiebereglern öffnen. */
+    fun openOccurrence(o: RoutineOccurrence, toggle: Boolean) {
+        if (o.routine.kind == RoutineKind.CHECKUP) checkup = o
+        else if (toggle) vm.toggle(o)
+        else selected = o
+    }
+
+    // „Jetzt ausfüllen“ aus der Erinnerung: passendes Vorkommen suchen (notfalls aus Routine + Zeitpunkt bauen).
+    LaunchedEffect(checkupRequest, routines) {
+        val req = checkupRequest ?: return@LaunchedEffect
+        val r = routines?.firstOrNull { it.id == req.routineId } ?: return@LaunchedEffect
+        val z = Dates.toZoned(req.atMillis, zone)
+        val date = z.toLocalDate()
+        val minutes = z.hour * 60 + z.minute
+        checkup = todayList.firstOrNull { it.routine.id == r.id && it.date == date && it.minutes == minutes }
+            ?: RoutineOccurrence(routine = r, date = date, minutes = minutes, at = req.atMillis)
+        vm.clearCheckupRequest()
+    }
 
     Scaffold(
         modifier = modifier,
-        topBar = { TopAppBar(title = { Text("Routinen & Medikamente") }, actions = { SettingsAction(onOpenSettings) }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Routinen & Medikamente") },
+                actions = {
+                    if (hasCheckup) {
+                        IconButton(onClick = onOpenMoodStats, modifier = Modifier.testTag("mood-stats")) {
+                            Icon(Icons.Filled.Insights, contentDescription = "Statistik Gefühlslage")
+                        }
+                    }
+                    SettingsAction(onOpenSettings)
+                },
+            )
+        },
         floatingActionButton = {
-            FloatingActionButton(onClick = { creating = true }, modifier = Modifier.testTag("routine-add")) {
+            FloatingActionButton(onClick = { creating = RoutineKind.MEDICATION }, modifier = Modifier.testTag("routine-add")) {
                 Icon(Icons.Filled.Add, "Routine oder Medikament hinzufügen")
             }
         },
@@ -152,7 +225,7 @@ fun RoutinesScreen(modifier: Modifier = Modifier, onOpenSettings: () -> Unit = {
                         text = "Lege Medikamente oder feste Routinen mit Uhrzeiten an – die App erinnert dich pünktlich " +
                             "im Vollbild, und du hakst jede Einnahme ab wie in MyTherapy.",
                         buttonText = "Erstes Medikament anlegen",
-                        onClick = { creating = true },
+                        onClick = { creating = RoutineKind.MEDICATION },
                         modifier = Modifier.padding(top = 12.dp),
                     )
                 }
@@ -163,7 +236,24 @@ fun RoutinesScreen(modifier: Modifier = Modifier, onOpenSettings: () -> Unit = {
             item { SectionTitle("Heute · ${TimeFormat.dayMonth(today)}") }
             if (routines != null && todayList.isEmpty()) item { EmptyHint("Heute steht nichts an.") }
             items(todayList, key = { it.key }) { o ->
-                OccurrenceRow(o, now, onToggle = { vm.toggle(o) }, onClick = { selected = o }, today = today, zone = zone)
+                OccurrenceRow(o, now, onToggle = { openOccurrence(o, toggle = true) }, onClick = { openOccurrence(o, toggle = false) }, today = today, zone = zone)
+            }
+
+            if (hasCheckup) {
+                item { SectionTitle("Gefühlslage", action = { TextButton(onClick = onOpenMoodStats) { Text("Statistik") } }) }
+                item { MoodSummaryCard(recentMood, symptoms, onOpenMoodStats) }
+            } else if (routines != null) {
+                item {
+                    InfoCard(
+                        icon = Icons.Filled.Mood,
+                        title = "Gefühls-Checkup",
+                        text = "Lass dich regelmäßig fragen, wie es dir geht: Müdigkeit, Unruhe, Stimmung … jeweils auf einer Skala von 1 bis 10. " +
+                            "Die Werte sammelt die App im Hintergrund für deine Statistik.",
+                        buttonText = "Checkup einrichten",
+                        onClick = { creating = RoutineKind.CHECKUP },
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                }
             }
 
             item { SectionTitle("Meine Routinen & Medikamente") }
@@ -174,13 +264,18 @@ fun RoutinesScreen(modifier: Modifier = Modifier, onOpenSettings: () -> Unit = {
         }
     }
 
-    if (creating) {
+    creating?.let { kind ->
         RoutineEditorSheet(
             routine = null,
-            onDismiss = { creating = false },
-            onSave = { vm.save(it); creating = false },
+            initialKind = kind,
+            onDismiss = { creating = null },
+            onSave = { vm.save(it); creating = null },
             onDelete = null,
             suggest = vm::suggest,
+            symptoms = symptoms,
+            onAddSymptom = vm::addSymptom,
+            onRemoveSymptom = vm::removeSymptom,
+            onCheckupChosen = vm::ensureDefaultSymptoms,
         )
     }
     editing?.let { r ->
@@ -190,7 +285,14 @@ fun RoutinesScreen(modifier: Modifier = Modifier, onOpenSettings: () -> Unit = {
             onSave = { vm.save(it); editing = null },
             onDelete = { vm.delete(r); editing = null },
             suggest = vm::suggest,
+            symptoms = symptoms,
+            onAddSymptom = vm::addSymptom,
+            onRemoveSymptom = vm::removeSymptom,
+            onCheckupChosen = vm::ensureDefaultSymptoms,
         )
+    }
+    checkup?.let { o ->
+        CheckupSheet(o = o, onDismiss = { checkup = null }, onOpenStats = onOpenMoodStats)
     }
     selected?.let { o ->
         OccurrenceSheet(
@@ -263,3 +365,40 @@ private fun RoutineCard(r: RoutineEntity, onClick: () -> Unit, onActiveChange: (
         }
     }
 }
+
+/** Kleine Übersicht der letzten 7 Tage: Anzahl Checkups und die drei stärksten Symptome. */
+@Composable
+private fun MoodSummaryCard(entries: List<MoodEntryEntity>, symptoms: List<SymptomEntity>, onOpen: () -> Unit) {
+    val checkups = entries.distinctBy { it.epochDay to it.minutes }.size
+    val top = entries.groupBy { it.symptomId }
+        .mapNotNull { (id, list) -> symptoms.firstOrNull { it.id == id }?.let { it.name to list.map { e -> e.value }.average() } }
+        .sortedByDescending { it.second }
+        .take(3)
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable(onClick = onOpen),
+    ) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.Mood, null, tint = AppColorsMood)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    if (checkups == 0) "Noch kein Checkup in den letzten 7 Tagen" else "$checkups Checkup${if (checkups == 1) "" else "s"} in den letzten 7 Tagen",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    if (top.isEmpty()) "Die Werte erscheinen hier und in der Statistik."
+                    else "Am stärksten: " + top.joinToString(", ") { "${it.first} ${"%.1f".format(TimeFormat.locale, it.second)}" },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+private val AppColorsMood get() = de.lltntplanet.adhsapp.ui.theme.AppColors.Mood

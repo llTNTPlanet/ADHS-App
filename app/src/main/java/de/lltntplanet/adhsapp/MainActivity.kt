@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import de.lltntplanet.adhsapp.data.mood.CheckupRequest
 import de.lltntplanet.adhsapp.reminders.ReminderKind
 import de.lltntplanet.adhsapp.ui.AppRoot
 import de.lltntplanet.adhsapp.ui.Tab
@@ -25,6 +26,7 @@ class MainActivity : ComponentActivity() {
             showUpdateIfRequested(intent)
             takeSharedText(intent)
             takeNutritionAction(intent)
+            takeCheckup(intent)
         }
         setContent {
             AdhsTheme {
@@ -39,6 +41,16 @@ class MainActivity : ComponentActivity() {
         showUpdateIfRequested(intent)
         takeSharedText(intent)
         takeNutritionAction(intent)
+        takeCheckup(intent)
+    }
+
+    /** „Jetzt ausfüllen“ aus der Checkup-Erinnerung → Seite „Routinen“ öffnet den Checkup direkt. */
+    private fun takeCheckup(intent: Intent?) {
+        val id = intent?.getLongExtra(EXTRA_CHECKUP_ID, -1L)?.takeIf { it > 0 } ?: return
+        val at = intent.getLongExtra(EXTRA_CHECKUP_AT, 0L)
+        intent.removeExtra(EXTRA_CHECKUP_ID)
+        (application as AdhsApp).container.checkupRequest.value = CheckupRequest(id, at)
+        requestedTab = Tab.ROUTINES
     }
 
     /** „Per Foto“ / „Per Chat“ aus der Essens-Erinnerung → Seite „Essen“ startet direkt Kamera bzw. Beschreibung. */
@@ -72,7 +84,7 @@ class MainActivity : ComponentActivity() {
         ReminderKind.TASK.name -> Tab.TASKS
         ReminderKind.BIRTHDAY.name -> Tab.BIRTHDAYS
         ReminderKind.EVENT.name -> Tab.CALENDAR
-        ReminderKind.MEDICATION.name, ReminderKind.ROUTINE.name -> Tab.ROUTINES
+        ReminderKind.MEDICATION.name, ReminderKind.ROUTINE.name, ReminderKind.CHECKUP.name -> Tab.ROUTINES
         ReminderKind.MEAL.name -> Tab.NUTRITION
         else -> null
     }
@@ -81,6 +93,8 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_TAB = "tab"
         const val EXTRA_SHOW_UPDATE = "show_update"
         const val EXTRA_NUTRITION_ACTION = "nutrition_action"
+        const val EXTRA_CHECKUP_ID = "checkup_id"
+        const val EXTRA_CHECKUP_AT = "checkup_at"
         const val NUTRITION_ACTION_PHOTO = "photo"
         const val NUTRITION_ACTION_CHAT = "chat"
     }

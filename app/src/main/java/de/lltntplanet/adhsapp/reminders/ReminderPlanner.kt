@@ -192,7 +192,11 @@ object ReminderPlanner {
             .map { o ->
                 Reminder(
                     key = o.key,
-                    kind = if (o.routine.kind == RoutineKind.MEDICATION) ReminderKind.MEDICATION else ReminderKind.ROUTINE,
+                    kind = when (o.routine.kind) {
+                        RoutineKind.MEDICATION -> ReminderKind.MEDICATION
+                        RoutineKind.ROUTINE -> ReminderKind.ROUTINE
+                        RoutineKind.CHECKUP -> ReminderKind.CHECKUP
+                    },
                     triggerAt = o.at,
                     title = o.routine.name,
                     detail = o.routine.dose.ifBlank { null },

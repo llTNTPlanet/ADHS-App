@@ -88,6 +88,8 @@ data class FoodEntryEntity(
 enum class RoutineKind(val label: String) {
     MEDICATION("Medikament"),
     ROUTINE("Routine"),
+    /** Gefühls-Checkup: statt Abhaken werden alle Symptome mit einem Schieberegler 1–10 abgefragt. */
+    CHECKUP("Checkup"),
 }
 
 /**
@@ -126,4 +128,33 @@ data class RoutineLogEntity(
     val minutes: Int,
     val skipped: Boolean = false,
     val doneAt: Long = System.currentTimeMillis(),
+)
+
+/**
+ * Ein Symptom, das beim Gefühls-Checkup abgefragt wird (z. B. „Müdigkeit“), wie in MyTherapy.
+ * Entfernte Symptome bleiben mit [active] = false erhalten, damit die Statistik ihre alten Werte behält.
+ */
+@Entity(tableName = "symptoms", indices = [Index(value = ["name"], unique = true)])
+data class SymptomEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val sortOrder: Int = 0,
+    val active: Boolean = true,
+    val createdAt: Long = System.currentTimeMillis(),
+)
+
+/** Ein Wert (1–10) eines Symptoms aus einem Checkup zu einem Zeitpunkt. */
+@Entity(
+    tableName = "mood_entries",
+    indices = [Index(value = ["symptomId", "epochDay", "minutes"], unique = true), Index(value = ["epochDay"])],
+)
+data class MoodEntryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val symptomId: Long,
+    val epochDay: Long,
+    /** Geplante Uhrzeit des Checkups in Minuten seit Mitternacht (wie in routine_log). */
+    val minutes: Int,
+    /** Stärke 1 (gar nicht) bis 10 (sehr stark). */
+    val value: Int,
+    val recordedAt: Long = System.currentTimeMillis(),
 )

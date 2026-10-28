@@ -52,6 +52,11 @@ Weitere Bilder: [Einrichtung](docs/screenshots/01-einrichtung.png), [Essen](docs
 - Erinnerung zu jeder Uhrzeit im Vollbild und als Benachrichtigung – mit „Genommen“-Knopf direkt darin;
   schon abgehakte Einnahmen lösen keine Erinnerung mehr aus, verpasste kommen bis zu drei Stunden nach
 - Die nächsten zwei offenen Einträge stehen auf dem Heute-Bildschirm
+- **Gefühls-Checkup** als dritte Art neben Medikament und Routine: zu jeder Uhrzeit fragt die App alle Symptome mit
+  einem Schieberegler von 1 (gar nicht) bis 10 (sehr stark) ab – vorbelegt nach dem Vorbild von MyTherapy (Müdigkeit,
+  Niedergeschlagenheit, Innere Unruhe, Konzentrationsprobleme, Reizbarkeit, Angst, Stress, …); Symptome lassen sich
+  jederzeit hinzufügen und entfernen. Die Werte landen in einer **Statistik** (7/30/90 Tage) mit Durchschnitt, Trend
+  zum Vorzeitraum und Verlaufslinie je Symptom; die Erinnerung hat einen „Jetzt ausfüllen“-Knopf
 
 **Aufgaben**
 - Überfällig / Heute / Morgen / Demnächst / Ohne Datum, Fortschrittsbalken „3 von 5 geschafft“

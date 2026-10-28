@@ -15,6 +15,8 @@ import de.lltntplanet.adhsapp.data.google.GoogleTasksApi
 import de.lltntplanet.adhsapp.data.google.GoogleTasksSync
 import de.lltntplanet.adhsapp.data.google.HealthApi
 import de.lltntplanet.adhsapp.data.health.HealthRepository
+import de.lltntplanet.adhsapp.data.mood.CheckupRequest
+import de.lltntplanet.adhsapp.data.mood.MoodRepository
 import de.lltntplanet.adhsapp.data.nutrition.FoodVisionClient
 import de.lltntplanet.adhsapp.data.nutrition.FoodVisionRouter
 import de.lltntplanet.adhsapp.data.nutrition.GeminiFoodVisionClient
@@ -83,6 +85,8 @@ class AppContainer(val app: Application) {
     val birthdays = BirthdayRepository(app, db.birthdayDao(), calendar, settings)
     val tasks = TaskRepository(db.taskDao()) { requestReschedule() }
     val routines = RoutineRepository(db.routineDao()) { requestReschedule() }
+    /** Symptome und Werte des Gefühls-Checkups. */
+    val moods = MoodRepository(db.moodDao())
     /** Eingebaute Liste gängiger Medikamente in Deutschland für Vorschläge beim Eintippen. */
     val medications = MedicationCatalog(app)
     val healthConnect = HealthConnectNutrition(app)
@@ -108,6 +112,8 @@ class AppContainer(val app: Application) {
     val sharedChatAnswer = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
     /** Aktion aus der Essens-Erinnerung („photo“ oder „chat“); die Seite „Essen“ holt sie ab und löscht sie. */
     val nutritionAction = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    /** „Jetzt ausfüllen“ aus der Checkup-Erinnerung; die Seite „Routinen“ öffnet dann den Checkup und löscht die Anfrage. */
+    val checkupRequest = kotlinx.coroutines.flow.MutableStateFlow<CheckupRequest?>(null)
     val updates = UpdateManager(app, settings, secrets, GitHubReleaseClient(), ApkInstaller(app), updateNotifier, scope)
 
     private var rescheduleJob: Job? = null
