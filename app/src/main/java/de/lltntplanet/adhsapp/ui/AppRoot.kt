@@ -37,6 +37,7 @@ import de.lltntplanet.adhsapp.ui.components.appContainer
 import de.lltntplanet.adhsapp.ui.health.HealthScreen
 import de.lltntplanet.adhsapp.ui.navigation.AppBottomBar
 import de.lltntplanet.adhsapp.ui.nutrition.NutritionScreen
+import de.lltntplanet.adhsapp.ui.mood.MoodStatsScreen
 import de.lltntplanet.adhsapp.ui.routines.RoutinesScreen
 import de.lltntplanet.adhsapp.ui.settings.SettingsScreen
 import de.lltntplanet.adhsapp.ui.settings.SetupScreen
@@ -130,7 +131,10 @@ fun AppRoot(requestedTab: Tab?, onTabHandled: () -> Unit) {
                 )
             }
             composable(Tab.TASKS.route) { TasksScreen(onOpenSettings = { nav.navigate("settings") }) }
-            composable(Tab.ROUTINES.route) { RoutinesScreen(onOpenSettings = { nav.navigate("settings") }) }
+            composable(Tab.ROUTINES.route) {
+                RoutinesScreen(onOpenSettings = { nav.navigate("settings") }, onOpenMoodStats = { nav.navigate("mood-stats") })
+            }
+            composable("mood-stats") { MoodStatsScreen(onBack = { nav.popBackStack() }) }
             composable(Tab.BIRTHDAYS.route) { BirthdaysScreen(onOpenSettings = { nav.navigate("settings") }) }
             composable(Tab.HEALTH.route) { HealthScreen(onOpenSettings = { nav.navigate("settings") }) }
             composable(Tab.NUTRITION.route) { NutritionScreen(onOpenSettings = { nav.navigate("settings") }) }

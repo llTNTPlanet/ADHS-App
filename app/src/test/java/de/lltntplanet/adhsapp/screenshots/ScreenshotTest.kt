@@ -23,7 +23,10 @@ import de.lltntplanet.adhsapp.data.settings.Sex
 import de.lltntplanet.adhsapp.data.db.Repeat
 import de.lltntplanet.adhsapp.data.db.RoutineEntity
 import de.lltntplanet.adhsapp.data.db.RoutineKind
+import de.lltntplanet.adhsapp.data.db.MoodEntryEntity
 import de.lltntplanet.adhsapp.data.db.RoutineLogEntity
+import de.lltntplanet.adhsapp.data.db.SymptomEntity
+import de.lltntplanet.adhsapp.data.mood.MoodLogic
 import de.lltntplanet.adhsapp.data.db.TaskEntity
 import de.lltntplanet.adhsapp.data.google.GoogleJson
 import de.lltntplanet.adhsapp.data.health.HealthDay
@@ -117,6 +120,23 @@ class ScreenshotTest {
         routines.upsert(RoutineEntity(name = "Spaziergang", kind = RoutineKind.ROUTINE, dose = "20 Minuten", times = "1050", weekdays = 0b0011111))
         routines.insertLog(RoutineLogEntity(routineId = 2, epochDay = today.toEpochDay(), minutes = 480))
         routines.insertLog(RoutineLogEntity(routineId = 3, epochDay = today.toEpochDay(), minutes = 470))
+        // Gefühls-Checkup abends mit Werten der letzten zwei Wochen für die Statistik.
+        routines.upsert(RoutineEntity(name = "Gefühls-Checkup", kind = RoutineKind.CHECKUP, times = "1200"))
+        val moods = c.db.moodDao()
+        moods.upsertSymptoms(MoodLogic.DEFAULT_SYMPTOMS.take(6).mapIndexed { i, n -> SymptomEntity(id = i + 1L, name = n, sortOrder = i) })
+        val curve = listOf(7, 6, 7, 5, 6, 4, 5, 4, 3, 4, 3, 3, 2, 3)
+        moods.insertEntries(
+            (1..6).flatMap { symptom ->
+                curve.mapIndexed { i, v ->
+                    MoodEntryEntity(
+                        symptomId = symptom.toLong(),
+                        epochDay = today.minusDays((curve.size - i).toLong()).toEpochDay(),
+                        minutes = 1200,
+                        value = ((v + symptom) % 9 + 1).coerceIn(1, 10),
+                    )
+                }
+            },
+        )
         val b = c.db.birthdayDao()
         b.upsert(BirthdayEntity(name = "Anna Schmidt", month = today.plusDays(1).monthValue, day = today.plusDays(1).dayOfMonth, year = 1992))
         b.upsert(BirthdayEntity(name = "Papa", month = today.monthValue, day = today.dayOfMonth, year = 1961))
@@ -195,6 +215,16 @@ class ScreenshotTest {
             shot("07-aufgaben")
             clickTab("routines")
             shot("13-routinen")
+            compose.onNode(androidx.compose.ui.test.hasContentDescription("Ausfüllen")).performClick()
+            compose.waitForIdle()
+            shot("15-gefuehls-checkup")
+            compose.onNode(androidx.compose.ui.test.hasTestTag("checkup-save")).performClick()
+            compose.waitForIdle()
+            compose.onNode(androidx.compose.ui.test.hasTestTag("mood-stats")).performClick()
+            compose.waitForIdle()
+            shot("16-gefuehlslage-statistik")
+            compose.onNode(androidx.compose.ui.test.hasContentDescription("Zurück")).performClick()
+            compose.waitForIdle()
             clickTab("birthdays")
             shot("08-geburtstage")
             clickTab("health")

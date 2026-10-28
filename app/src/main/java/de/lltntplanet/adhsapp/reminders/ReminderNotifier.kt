@@ -88,6 +88,9 @@ class ReminderNotifier(private val context: Context) {
                     val label = if (r.kind == ReminderKind.MEDICATION) "Genommen" else "Erledigt"
                     builder.addAction(0, label, ReminderActionReceiver.pendingIntent(context, ReminderActionReceiver.ACTION_DONE, r))
                 }
+                if (r.kind.isCheckup && r.refId != null) {
+                    builder.addAction(0, "Jetzt ausfüllen", checkupIntent(r))
+                }
                 if (r.canMute) {
                     builder.addAction(0, "Keine weiteren", ReminderActionReceiver.pendingIntent(context, ReminderActionReceiver.ACTION_MUTE, r))
                 }
@@ -128,6 +131,17 @@ class ReminderNotifier(private val context: Context) {
             .addAction(0, "Später", ReminderActionReceiver.pendingIntent(context, ReminderActionReceiver.ACTION_SNOOZE, r, 30))
             .build()
 
+    /** Öffnet die Seite „Routinen“ direkt mit der Symptom-Abfrage dieses Checkups. */
+    private fun checkupIntent(r: Reminder): PendingIntent {
+        val intent = checkupLaunchIntent(context, r).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        return PendingIntent.getActivity(
+            context,
+            ("checkup:${r.key}").hashCode(),
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+    }
+
     /** Öffnet die Seite „Essen“; mit [action] startet dort direkt Kamera bzw. Beschreibung. */
     private fun nutritionIntent(r: Reminder, action: String?): PendingIntent {
         val intent = Intent(context, MainActivity::class.java)
@@ -167,3 +181,10 @@ class ReminderNotifier(private val context: Context) {
         private const val DEFAULT_COLOR = 0xFF0B57D0.toInt()
     }
 }
+
+/** Intent auf die Hauptseite, der den Checkup aus [r] direkt öffnet (Routinen-Tab + Symptom-Abfrage). */
+fun checkupLaunchIntent(context: Context, r: Reminder): Intent =
+    Intent(context, MainActivity::class.java)
+        .putExtra(MainActivity.EXTRA_TAB, ReminderKind.CHECKUP.name)
+        .putExtra(MainActivity.EXTRA_CHECKUP_ID, r.refId ?: -1L)
+        .putExtra(MainActivity.EXTRA_CHECKUP_AT, r.targetTime ?: r.triggerAt)

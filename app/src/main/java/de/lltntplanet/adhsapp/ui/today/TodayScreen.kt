@@ -79,6 +79,8 @@ import de.lltntplanet.adhsapp.ui.components.EmptyHint
 import de.lltntplanet.adhsapp.ui.components.InfoCard
 import de.lltntplanet.adhsapp.ui.components.SectionTitle
 import de.lltntplanet.adhsapp.ui.components.appViewModel
+import de.lltntplanet.adhsapp.data.db.RoutineKind
+import de.lltntplanet.adhsapp.ui.routines.CheckupSheet
 import de.lltntplanet.adhsapp.ui.routines.OccurrenceRow
 import de.lltntplanet.adhsapp.ui.tasks.TaskRow
 import de.lltntplanet.adhsapp.ui.theme.AppColors
@@ -227,6 +229,7 @@ fun TodayScreen(
     val refreshing by vm.refreshing.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     var permissions by remember { mutableStateOf(Permissions.state(context)) }
+    var checkup by remember { mutableStateOf<RoutineOccurrence?>(null) }
     var selected by remember { mutableStateOf<EventInstance?>(null) }
     var quick by rememberSaveable { mutableStateOf("") }
     val zone = remember { ZoneId.systemDefault() }
@@ -306,7 +309,15 @@ fun TodayScreen(
                 item { SectionTitle("Routinen & Medikamente", action = { TextButton(onClick = onOpenRoutines) { Text("Alle") } }) }
                 if (nextRoutines.isEmpty()) item { EmptyHint("Alles abgehakt – nichts mehr offen. 💊✅") }
                 items(nextRoutines, key = { it.key }) { o ->
-                    OccurrenceRow(o, now, onToggle = { vm.toggleRoutine(o) }, onClick = onOpenRoutines, today = today, zone = zone, showDay = true)
+                    OccurrenceRow(
+                        o,
+                        now,
+                        onToggle = { if (o.routine.kind == RoutineKind.CHECKUP) checkup = o else vm.toggleRoutine(o) },
+                        onClick = { if (o.routine.kind == RoutineKind.CHECKUP) checkup = o else onOpenRoutines() },
+                        today = today,
+                        zone = zone,
+                        showDay = true,
+                    )
                 }
             }
 
@@ -362,6 +373,7 @@ fun TodayScreen(
             },
         )
     }
+    checkup?.let { o -> CheckupSheet(o = o, onDismiss = { checkup = null }) }
 }
 
 private fun greeting(time: LocalTime): String = when (time.hour) {

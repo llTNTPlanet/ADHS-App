@@ -59,6 +59,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import de.lltntplanet.adhsapp.data.db.RoutineEntity
 import de.lltntplanet.adhsapp.data.db.RoutineKind
+import de.lltntplanet.adhsapp.data.db.SymptomEntity
 import de.lltntplanet.adhsapp.data.routines.Medication
 import de.lltntplanet.adhsapp.data.routines.RoutineLogic
 import de.lltntplanet.adhsapp.data.routines.RoutineOccurrence
@@ -78,18 +79,34 @@ fun RoutineEditorSheet(
     onDelete: (() -> Unit)?,
     /** Vorschläge aus der Medikamenten-Liste zur aktuellen Eingabe. */
     suggest: suspend (String) -> List<Medication> = { emptyList() },
+    /** Symptome für die Art „Checkup“ (aktive), plus Hinzufügen/Entfernen. */
+    symptoms: List<SymptomEntity> = emptyList(),
+    onAddSymptom: (String) -> Unit = {},
+    onRemoveSymptom: (SymptomEntity) -> Unit = {},
+    /** Wird aufgerufen, sobald „Checkup“ gewählt ist – legt beim ersten Mal die Standard-Symptome an. */
+    onCheckupChosen: () -> Unit = {},
+    /** Vorausgewählte Art beim Neuanlegen (z. B. direkt „Checkup“). */
+    initialKind: RoutineKind = RoutineKind.MEDICATION,
 ) {
     var name by remember { mutableStateOf(routine?.name.orEmpty()) }
     var suggestions by remember { mutableStateOf<List<Medication>>(emptyList()) }
     /** Aus der Liste gewähltes Medikament – dann erscheinen seine üblichen Stärken zum Antippen. */
     var picked by remember { mutableStateOf<Medication?>(null) }
-    var kind by remember { mutableStateOf(routine?.kind ?: RoutineKind.MEDICATION) }
+    var kind by remember { mutableStateOf(routine?.kind ?: initialKind) }
     var dose by remember { mutableStateOf(routine?.dose.orEmpty()) }
     val times = remember { (routine?.let { RoutineLogic.times(it) } ?: listOf(8 * 60)).toMutableStateList() }
     var weekdays by remember { mutableIntStateOf(routine?.weekdays ?: RoutineEntity.ALL_DAYS) }
     var pickingTime by remember { mutableStateOf<Int?>(null) } // Index in times, -1 = neu
     var confirmDelete by remember { mutableStateOf(false) }
     val valid = name.isNotBlank() && times.isNotEmpty() && weekdays != 0
+    val checkup = kind == RoutineKind.CHECKUP
+
+    LaunchedEffect(kind) {
+        if (checkup) {
+            onCheckupChosen()
+            if (name.isBlank()) name = DEFAULT_CHECKUP_NAME
+        }
+    }
 
     // Beim Bearbeiten: Passt der Name zu einem Listeneintrag (z. B. „Medikinet adult 20 mg“)? Dann Stärken anbieten.
     LaunchedEffect(Unit) {
@@ -137,8 +154,8 @@ fun RoutineEditorSheet(
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
-                label = { Text(if (kind == RoutineKind.MEDICATION) "Medikament" else "Routine") },
-                placeholder = { Text(if (kind == RoutineKind.MEDICATION) "z. B. Methylphenidat 10 mg" else "z. B. Zähne putzen") },
+                label = { Text(when (kind) { RoutineKind.MEDICATION -> "Medikament"; RoutineKind.ROUTINE -> "Routine"; RoutineKind.CHECKUP -> "Name" }) },
+                placeholder = { Text(when (kind) { RoutineKind.MEDICATION -> "z. B. Methylphenidat 10 mg"; RoutineKind.ROUTINE -> "z. B. Zähne putzen"; RoutineKind.CHECKUP -> "z. B. $DEFAULT_CHECKUP_NAME" }) },
                 supportingText = if (kind == RoutineKind.MEDICATION && name.isEmpty()) {
                     { Text("Tipp: Einfach lostippen – Vorschläge aus der Liste gängiger Medikamente (Deutschland).") }
                 } else {
@@ -169,8 +186,19 @@ fun RoutineEditorSheet(
                     }
                 }
             }
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
+            if (checkup) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Zu jeder Uhrzeit fragt die App alle Symptome unten mit einem Schieberegler von 1 bis 10 ab. " +
+                        "Die Werte landen in der Statistik.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                SymptomEditor(symptoms, onAdd = onAddSymptom, onRemove = onRemoveSymptom)
+            }
+            if (!checkup) Spacer(Modifier.height(8.dp))
+            if (!checkup) OutlinedTextField(
                 value = dose,
                 onValueChange = { dose = it },
                 label = { Text(if (kind == RoutineKind.MEDICATION) "Dosis / Hinweis" else "Hinweis") },
@@ -249,7 +277,7 @@ fun RoutineEditorSheet(
                             (routine ?: RoutineEntity(name = "", times = "")).copy(
                                 name = name.trim(),
                                 kind = kind,
-                                dose = dose.trim(),
+                                dose = if (checkup) "" else dose.trim(),
                                 times = RoutineLogic.encodeTimes(times),
                                 weekdays = weekdays,
                             ),
@@ -277,12 +305,19 @@ fun RoutineEditorSheet(
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text("Löschen?") },
-            text = { Text("„$name“ und alle Abhak-Einträge werden entfernt. Erinnerungen dazu gibt es dann nicht mehr.") },
+            text = {
+                Text(
+                    if (checkup) "„$name“ wird entfernt und nicht mehr abgefragt. Die bisher gespeicherten Werte bleiben in der Statistik."
+                    else "„$name“ und alle Abhak-Einträge werden entfernt. Erinnerungen dazu gibt es dann nicht mehr.",
+                )
+            },
             confirmButton = { TextButton(onClick = { confirmDelete = false; onDelete() }) { Text("Löschen") } },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Abbrechen") } },
         )
     }
 }
+
+const val DEFAULT_CHECKUP_NAME = "Gefühls-Checkup"
 
 /** Aufklappliste unter dem Namensfeld: Treffer aus der Medikamenten-Liste. */
 @Composable
@@ -326,7 +361,6 @@ fun OccurrenceSheet(
     onSkip: () -> Unit,
     onEdit: () -> Unit,
 ) {
-    val med = o.routine.kind == RoutineKind.MEDICATION
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -341,7 +375,7 @@ fun OccurrenceSheet(
                     o.routine.dose.ifBlank { null },
                     when {
                         o.skipped -> "übersprungen"
-                        o.done -> if (med) "genommen" else "erledigt"
+                        o.done -> doneWord(o.routine.kind)
                         RoutineLogic.isOverdue(o, now) -> "noch offen"
                         else -> null
                     },
@@ -354,7 +388,7 @@ fun OccurrenceSheet(
             Button(onClick = onToggle, modifier = Modifier.fillMaxWidth().height(56.dp)) {
                 Icon(if (checked) Icons.Filled.RadioButtonUnchecked else Icons.Filled.CheckCircle, null)
                 Spacer(Modifier.width(8.dp))
-                Text(if (checked) "Haken entfernen" else if (med) "Genommen" else "Erledigt")
+                Text(if (checked) "Haken entfernen" else doneAction(o.routine.kind))
             }
             if (!checked) {
                 Spacer(Modifier.height(8.dp))
@@ -368,7 +402,7 @@ fun OccurrenceSheet(
             TextButton(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Filled.Edit, null)
                 Spacer(Modifier.width(8.dp))
-                Text(if (med) "Medikament bearbeiten" else "Routine bearbeiten")
+                Text(when (o.routine.kind) { RoutineKind.MEDICATION -> "Medikament bearbeiten"; RoutineKind.ROUTINE -> "Routine bearbeiten"; RoutineKind.CHECKUP -> "Checkup bearbeiten" })
             }
         }
     }

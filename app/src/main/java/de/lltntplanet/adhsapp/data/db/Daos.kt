@@ -141,3 +141,49 @@ interface RoutineDao {
     @Query("DELETE FROM routine_log WHERE epochDay < :beforeDay")
     suspend fun purgeLog(beforeDay: Long)
 }
+
+@Dao
+interface MoodDao {
+    @Query("SELECT * FROM symptoms ORDER BY active DESC, sortOrder ASC, name ASC")
+    fun observeSymptoms(): Flow<List<SymptomEntity>>
+
+    @Query("SELECT * FROM symptoms ORDER BY sortOrder ASC, name ASC")
+    suspend fun symptoms(): List<SymptomEntity>
+
+    @Query("SELECT COUNT(*) FROM symptoms")
+    suspend fun symptomCount(): Int
+
+    @Query("SELECT * FROM symptoms WHERE LOWER(name) = LOWER(:name) LIMIT 1")
+    suspend fun symptomByName(name: String): SymptomEntity?
+
+    @Query("SELECT COALESCE(MAX(sortOrder), 0) FROM symptoms")
+    suspend fun maxSortOrder(): Int
+
+    @Upsert
+    suspend fun upsertSymptom(symptom: SymptomEntity): Long
+
+    @Upsert
+    suspend fun upsertSymptoms(symptoms: List<SymptomEntity>)
+
+    @Query("DELETE FROM symptoms WHERE id = :id")
+    suspend fun deleteSymptom(id: Long)
+
+    @Query("SELECT * FROM mood_entries WHERE epochDay BETWEEN :fromDay AND :toDay ORDER BY epochDay, minutes")
+    fun observeEntries(fromDay: Long, toDay: Long): Flow<List<MoodEntryEntity>>
+
+    @Query("SELECT * FROM mood_entries WHERE epochDay = :epochDay AND minutes = :minutes")
+    fun observeCheckup(epochDay: Long, minutes: Int): Flow<List<MoodEntryEntity>>
+
+    /** Der zuletzt erfasste Wert je Symptom – als Vorbelegung für den nächsten Checkup. */
+    @Query("SELECT * FROM mood_entries WHERE id IN (SELECT MAX(id) FROM mood_entries GROUP BY symptomId)")
+    suspend fun lastValues(): List<MoodEntryEntity>
+
+    @Query("SELECT COUNT(*) FROM mood_entries WHERE symptomId = :symptomId")
+    suspend fun entryCount(symptomId: Long): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertEntries(entries: List<MoodEntryEntity>)
+
+    @Query("DELETE FROM mood_entries WHERE epochDay = :epochDay AND minutes = :minutes")
+    suspend fun deleteCheckup(epochDay: Long, minutes: Int)
+}

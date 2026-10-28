@@ -85,4 +85,17 @@ class RoutineLogicTest {
         assertTrue(ReminderPlanner.isDue(r, millis("2026-10-26T16:00")))
         assertFalse(ReminderPlanner.isDue(r, millis("2026-10-26T17:30")))
     }
+
+    @Test
+    fun checkupBecomesCheckupReminderWithoutDose() {
+        val checkup = RoutineEntity(id = 3, name = "Gefühls-Checkup", kind = RoutineKind.CHECKUP, times = "1200")
+        val reminders = ReminderPlanner.planRoutines(listOf(checkup), emptyList(), monday, monday, Berlin)
+        val r = reminders.single()
+        assertEquals(ReminderKind.CHECKUP, r.kind)
+        assertTrue(r.kind.isCheckup)
+        assertFalse(r.kind.isRoutine)
+        assertEquals(millis("2026-10-26T20:00"), r.triggerAt)
+        assertEquals(3L, r.refId)
+        assertEquals(null, r.detail)
+    }
 }

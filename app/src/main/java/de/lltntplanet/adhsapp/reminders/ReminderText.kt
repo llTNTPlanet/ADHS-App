@@ -12,6 +12,7 @@ object ReminderText {
         ReminderKind.BIRTHDAY -> "🎂 ${r.title}"
         ReminderKind.MEDICATION -> "💊 ${r.title}"
         ReminderKind.MEAL -> "🍽️ ${r.title} eintragen"
+        ReminderKind.CHECKUP -> "💭 ${r.title}"
         else -> r.title
     }
 
@@ -22,6 +23,7 @@ object ReminderText {
         ReminderKind.MEDICATION -> "💊 ${r.title}"
         ReminderKind.ROUTINE -> "Routine: ${r.title}"
         ReminderKind.MEAL -> "🍽️ ${r.title} eintragen?"
+        ReminderKind.CHECKUP -> "💭 ${r.title}"
     }
 
     fun subtitle(r: Reminder, now: Long = System.currentTimeMillis(), zone: ZoneId = ZoneId.systemDefault()): String {
@@ -32,6 +34,7 @@ object ReminderText {
             ReminderKind.BIRTHDAY -> birthdaySubtitle(r, today, zone)
             ReminderKind.MEDICATION, ReminderKind.ROUTINE -> routineSubtitle(r, now, today, zone)
             ReminderKind.MEAL -> mealSubtitle(r, today, zone)
+            ReminderKind.CHECKUP -> checkupSubtitle(r, now, today, zone)
         }
     }
 
@@ -40,6 +43,17 @@ object ReminderText {
         val day = Dates.toLocalDate(start, zone)
         val dayPrefix = if (day == today) "" else "${TimeFormat.relativeDay(day, today)}, "
         return "Was gab es um $dayPrefix${TimeFormat.time(start, zone)} Uhr? Per Foto oder Chat eintragen."
+    }
+
+    private fun checkupSubtitle(r: Reminder, now: Long, today: LocalDate, zone: ZoneId): String {
+        val at = r.targetTime ?: return "Wie geht es dir gerade? Kurz die Symptome bewerten."
+        val day = Dates.toLocalDate(at, zone)
+        val dayPrefix = if (day == today) "" else "${TimeFormat.relativeDay(day, today)}, "
+        return when {
+            at - now >= 60_000L -> "Checkup ${TimeFormat.countdown(at, now)} · $dayPrefix${TimeFormat.time(at, zone)}"
+            at < now - 60_000L -> "Checkup war um $dayPrefix${TimeFormat.time(at, zone)} · noch offen – wie geht es dir?"
+            else -> "Wie geht es dir gerade? Kurz die Symptome bewerten."
+        }
     }
 
     private fun eventSubtitle(r: Reminder, now: Long, today: LocalDate, zone: ZoneId): String {
@@ -92,7 +106,7 @@ object ReminderText {
     /** Großer Countdown im Vollbild, null wenn nicht sinnvoll. */
     fun bigCountdown(r: Reminder, now: Long): String? {
         val target = r.targetTime ?: return null
-        if (r.allDay || r.kind == ReminderKind.BIRTHDAY || r.kind.isRoutine || r.kind.isQuiet) return null
+        if (r.allDay || r.kind == ReminderKind.BIRTHDAY || r.kind.isRoutine || r.kind.isCheckup || r.kind.isQuiet) return null
         return TimeFormat.countdown(target, now).replaceFirstChar { it.titlecase(TimeFormat.locale) }
     }
 }

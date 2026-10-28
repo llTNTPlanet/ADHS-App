@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Medication
+import androidx.compose.material.icons.filled.Mood
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.NotificationsOff
@@ -187,6 +188,8 @@ class ReminderActivity : ComponentActivity() {
                 r.targetTime?.let { putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, it) }
                 r.targetEnd?.let { putExtra(CalendarContract.EXTRA_EVENT_END_TIME, it) }
             }
+        } else if (r.kind.isCheckup && r.refId != null) {
+            checkupLaunchIntent(this, r)
         } else {
             Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_TAB, r.kind.name)
         }.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -229,6 +232,7 @@ private fun kindColor(kind: ReminderKind): Color = when (kind) {
     ReminderKind.MEDICATION -> AppColors.Medication
     ReminderKind.ROUTINE -> AppColors.Routine
     ReminderKind.MEAL -> AppColors.Routine
+    ReminderKind.CHECKUP -> AppColors.Mood
 }
 
 @Composable
@@ -272,6 +276,7 @@ private fun AlertScreen(
                             ReminderKind.MEDICATION -> Icons.Filled.Medication
                             ReminderKind.ROUTINE -> Icons.Filled.Repeat
                             ReminderKind.MEAL -> Icons.Filled.Restaurant
+                            ReminderKind.CHECKUP -> Icons.Filled.Mood
                         },
                         contentDescription = null,
                         tint = Color.White,
@@ -348,7 +353,17 @@ private fun AlertScreen(
                 // Aktionen – groß und eindeutig
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     val primaryColors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = background)
-                    if ((r.kind == ReminderKind.TASK || r.kind.isRoutine) && r.refId != null) {
+                    if (r.kind.isCheckup && r.refId != null) {
+                        Button(
+                            onClick = onOpen,
+                            colors = primaryColors,
+                            modifier = Modifier.fillMaxWidth().height(64.dp),
+                        ) {
+                            Icon(Icons.Filled.Mood, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Jetzt ausfüllen", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        }
+                    } else if ((r.kind == ReminderKind.TASK || r.kind.isRoutine) && r.refId != null) {
                         Button(
                             onClick = onDone,
                             colors = primaryColors,
@@ -402,7 +417,7 @@ private fun AlertScreen(
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         TextButton(onClick = onOpen) { Text("Öffnen", color = Color.White) }
-                        if ((r.kind == ReminderKind.TASK || r.kind.isRoutine) && r.refId != null) {
+                        if ((r.kind == ReminderKind.TASK || r.kind.isRoutine || r.kind.isCheckup) && r.refId != null) {
                             TextButton(onClick = onDismiss) { Text("Nur schließen", color = Color.White) }
                         }
                     }

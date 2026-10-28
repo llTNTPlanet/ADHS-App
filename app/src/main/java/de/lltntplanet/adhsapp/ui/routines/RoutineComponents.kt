@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Medication
+import androidx.compose.material.icons.filled.Mood
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material3.Icon
@@ -40,11 +41,27 @@ import java.time.ZoneId
 fun routineColor(kind: RoutineKind): Color = when (kind) {
     RoutineKind.MEDICATION -> AppColors.Medication
     RoutineKind.ROUTINE -> AppColors.Routine
+    RoutineKind.CHECKUP -> AppColors.Mood
 }
 
 fun routineIcon(kind: RoutineKind): ImageVector = when (kind) {
     RoutineKind.MEDICATION -> Icons.Filled.Medication
     RoutineKind.ROUTINE -> Icons.Filled.Repeat
+    RoutineKind.CHECKUP -> Icons.Filled.Mood
+}
+
+/** „Genommen“ / „Erledigt“ / „Ausgefüllt“ – Wort für den abgehakten Zustand je Art. */
+fun doneWord(kind: RoutineKind): String = when (kind) {
+    RoutineKind.MEDICATION -> "genommen"
+    RoutineKind.ROUTINE -> "erledigt"
+    RoutineKind.CHECKUP -> "ausgefüllt"
+}
+
+/** Beschriftung des Abhak-Knopfs je Art. */
+fun doneAction(kind: RoutineKind): String = when (kind) {
+    RoutineKind.MEDICATION -> "Genommen"
+    RoutineKind.ROUTINE -> "Erledigt"
+    RoutineKind.CHECKUP -> "Ausfüllen"
 }
 
 /** Zeile „Uhrzeit · Name · Dosis“ mit großem Abhak-Kreis – wie die Tagesliste in MyTherapy. */
@@ -72,7 +89,7 @@ fun OccurrenceRow(
         IconButton(onClick = onToggle) {
             Icon(
                 if (checked) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
-                contentDescription = if (checked) "Haken entfernen" else if (o.routine.kind == RoutineKind.MEDICATION) "Genommen" else "Erledigt",
+                contentDescription = if (checked) "Haken entfernen" else doneAction(o.routine.kind),
                 tint = if (o.done) color else if (overdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(28.dp),
             )
@@ -93,7 +110,7 @@ fun OccurrenceRow(
             val dayPrefix = if (showDay && o.date != today) "${TimeFormat.relativeDay(o.date, today)}, " else ""
             val status = when {
                 o.skipped -> "übersprungen"
-                o.done -> if (o.routine.kind == RoutineKind.MEDICATION) "genommen" else "erledigt"
+                o.done -> doneWord(o.routine.kind)
                 overdue -> "noch offen"
                 o.at > now -> TimeFormat.countdown(o.at, now)
                 else -> "jetzt"

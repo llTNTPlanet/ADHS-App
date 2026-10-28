@@ -10,6 +10,8 @@ enum class ReminderKind(val label: String) {
     ROUTINE("Routine"),
     /** Nach einem Essens-Termin: ans Eintragen der Mahlzeit erinnern (nur Benachrichtigung, kein Vollbild). */
     MEAL("Mahlzeit"),
+    /** Gefühls-Checkup: öffnet die Symptom-Abfrage statt eines „Erledigt“-Knopfs. */
+    CHECKUP("Gefühls-Checkup"),
     ;
 
     /** Stille Erinnerung ohne Vollbild und Klingeln – nur eine normale Benachrichtigung. */
@@ -17,6 +19,9 @@ enum class ReminderKind(val label: String) {
 
     /** Routinen und Medikamente werden gleich behandelt (abhaken statt erledigen). */
     val isRoutine: Boolean get() = this == MEDICATION || this == ROUTINE
+
+    /** Checkup: wird nicht abgehakt, sondern ausgefüllt. */
+    val isCheckup: Boolean get() = this == CHECKUP
 }
 
 /** Eine konkrete Erinnerung zu einem Zeitpunkt. [key] ist pro Vorkommen und Vorlaufzeit eindeutig. */
