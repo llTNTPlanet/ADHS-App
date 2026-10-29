@@ -33,11 +33,15 @@ Weitere Bilder: [Einrichtung](docs/screenshots/01-einrichtung.png), [Essen](docs
 - Termine: frei wählbare Vorwarnungen (Standard: 30 **und** 15 Min. vorher, optional auch zu Beginn) plus die Erinnerungen
   aus Google Kalender; Termine mit Titeln wie „Frühstück“ oder „Mittagessen“ lösen keine Erinnerung aus (Liste in den
   Einstellungen anpassbar)
+- Essens-Termine (Titel enthält ein Wort wie „Abendessen“ oder „Essen“, z. B. „Essen mit Anna“) haben **eigene
+  Vorwarnzeiten**: Standard genau 30 und 10 Min. vorher, frei wählbar inklusive eigener Minuten – statt der allgemeinen
+  Vorwarnungen und ohne zusätzliche Erinnerungen aus Google Kalender; Termine, die genau „Frühstück“ oder „Mittagessen“
+  heißen, bleiben wie bisher ohne Vorwarnung
 - „Keine weiteren Erinnerungen zu diesem Termin“ im Vollbild und in der Benachrichtigung: unterdrückt alle weiteren
   Vorwarnungen und Schlummer-Wiederholungen dieses Termins für den jeweiligen Tag
 - Geburtstage: am Tag und/oder 1/3/7 Tage vorher (für Geschenke)
 - Aufgaben: zur Fälligkeit; wiederkehrende Aufgaben (täglich, werktags, wöchentlich, monatlich)
-- Routinen und Medikamente: zu jeder eingetragenen Uhrzeit, mit „Genommen“-Knopf
+- Routinen und Medikamente: zu jeder eingetragenen Uhrzeit, mit „Genommen“-Knopf – regelmäßig oder einmalig an einem Datum
 - Nach dem Essen: nach Terminen wie „Frühstück“ oder „Essen mit Anna“ kommt eine **normale Benachrichtigung** (kein
   Vollbild, kein Klingeln) mit den Knöpfen „Per Foto“ und „Per Chat“, die die Mahlzeit direkt auf der Seite „Essen“
   erfassen; Wartezeit nach dem Termin-Ende und erkannte Wörter in den Einstellungen anpassbar
@@ -46,6 +50,10 @@ Weitere Bilder: [Einrichtung](docs/screenshots/01-einrichtung.png), [Essen](docs
 
 **Routinen & Medikamente** – wie in MyTherapy
 - Medikamente (mit Dosis) und feste Routinen mit beliebig vielen Uhrzeiten und Wochentagen (täglich, Mo–Fr, einzeln)
+- **Einmalig** statt regelmäßig: Medikament, Routine oder Checkup nur an einem bestimmten Datum zu den gewählten
+  Uhrzeiten (z. B. eine einzelne Tablette, Blutabnahme nüchtern, ein zusätzlicher Checkup) – über den Knopf „Einmalig“
+  oder beim Anlegen umschaltbar, mit derselben Vollbild-Erinnerung und demselben Abhaken; vergangene einmalige Einträge
+  sammeln sich eingeklappt unter „Vorbei“ und lassen sich gesammelt löschen
 - Beim Eintippen eines Medikaments schlägt die App passende Namen aus einer eingebauten Liste gängiger Medikamente in
   Deutschland vor (Wirkstoffe, Handelsnamen, Nahrungsergänzung – mit Schwerpunkt ADHS) und bietet die üblichen Stärken zum Antippen
 - Tagesliste mit „3 von 5 geschafft“, Abhaken („Genommen“ / „Erledigt“), Überspringen, Pausieren per Schalter

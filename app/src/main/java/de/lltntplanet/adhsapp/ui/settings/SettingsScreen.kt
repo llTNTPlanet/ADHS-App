@@ -15,10 +15,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.InputChip
@@ -45,7 +49,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -219,7 +225,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenSetup: () -> Unit) {
 
             // Termine
             Section("Erinnerungen an Termine")
-            Label("Vorwarnungen vor jedem Termin")
+            Label("Vorwarnungen vor Terminen")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(0, 5, 10, 15, 30, 60, 120).forEach { m ->
                     FilterChip(
@@ -229,9 +235,14 @@ fun SettingsScreen(onBack: () -> Unit, onOpenSetup: () -> Unit) {
                     )
                 }
             }
+            Text(
+                "Essens-Termine haben eigene Zeiten – siehe „Essens-Termine“ weiter unten.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             SwitchSetting(
                 "Erinnerungen aus Google Kalender übernehmen",
-                "Zusätzlich zu den Vorwarnungen oben",
+                "Zusätzlich zu den Vorwarnungen oben – nicht bei Essens-Terminen",
                 s.useCalendarReminders,
             ) { v -> vm.update { it.copy(useCalendarReminders = v) } }
             Label("Keine Erinnerung bei diesen Termin-Titeln")
@@ -270,58 +281,6 @@ fun SettingsScreen(onBack: () -> Unit, onOpenSetup: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             SwitchSetting(
-                "Nach dem Essen ans Eintragen erinnern",
-                "Normale Benachrichtigung nach Essens-Terminen mit „Per Foto“ und „Per Chat“ – kein Vollbild, kein Klingeln",
-                s.mealReminders,
-            ) { v -> vm.update { it.copy(mealReminders = v) } }
-            if (s.mealReminders) {
-                Label("Wann nach dem Ende des Termins")
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(0, 5, 10, 15, 30).forEach { m ->
-                        FilterChip(
-                            selected = m == s.mealReminderMinutesAfter,
-                            onClick = { vm.update { it.copy(mealReminderMinutesAfter = m) } },
-                            label = { Text(if (m == 0) "Sofort" else "$m Min. später") },
-                        )
-                    }
-                }
-                Label("Essens-Termine erkennen an diesen Wörtern im Titel")
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    s.mealEventTitles.sorted().forEach { title ->
-                        InputChip(
-                            selected = false,
-                            onClick = { vm.update { it.copy(mealEventTitles = it.mealEventTitles - title) } },
-                            label = { Text(title) },
-                            trailingIcon = { Icon(Icons.Filled.Close, "Entfernen", Modifier.size(16.dp)) },
-                        )
-                    }
-                }
-                var newMealTitle by remember { mutableStateOf("") }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = newMealTitle,
-                        onValueChange = { newMealTitle = it },
-                        placeholder = { Text("z. B. Brunch") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                    OutlinedButton(
-                        enabled = newMealTitle.isNotBlank(),
-                        onClick = {
-                            val t = newMealTitle.trim()
-                            vm.update { it.copy(mealEventTitles = it.mealEventTitles + t) }
-                            newMealTitle = ""
-                        },
-                    ) { Text("Hinzufügen") }
-                }
-                Text(
-                    "Zählt, wenn eines der Wörter im Termin-Titel vorkommt (z. B. „Frühstück“ oder „Essen mit Anna“). " +
-                        "Die Erinnerung kommt auch, wenn der Termin oben bei „Keine Erinnerung“ steht.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            SwitchSetting(
                 "Ganztägige Termine",
                 "Erinnerung am Tag um ${TimeFormat.minutesOfDay(s.allDayReminderMinutes)} Uhr",
                 s.allDayReminders,
@@ -349,6 +308,10 @@ fun SettingsScreen(onBack: () -> Unit, onOpenSetup: () -> Unit) {
                     }
                 }
             }
+
+            // Essens-Termine
+            Section("Essens-Termine")
+            MealSettings(s, vm::update)
 
             // Geburtstage
             Section("Geburtstage")
@@ -526,6 +489,144 @@ fun SettingsScreen(onBack: () -> Unit, onOpenSetup: () -> Unit) {
 }
 
 private fun <T> Set<T>.toggle(value: T): Set<T> = if (value in this) this - value else this + value
+
+/**
+ * Essens-Termine: woran sie erkannt werden, wann vorher erinnert wird (eigene Zeiten statt der allgemeinen
+ * Vorwarnungen und ohne Google-Kalender-Erinnerungen) und die Erinnerung zum Eintragen danach.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MealSettings(s: AppSettings, update: ((AppSettings) -> AppSettings) -> Unit) {
+    Label("Essens-Termine erkennen an diesen Wörtern im Titel")
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        s.mealEventTitles.sorted().forEach { title ->
+            InputChip(
+                selected = false,
+                onClick = { update { it.copy(mealEventTitles = it.mealEventTitles - title) } },
+                label = { Text(title) },
+                trailingIcon = { Icon(Icons.Filled.Close, "Entfernen", Modifier.size(16.dp)) },
+            )
+        }
+    }
+    var newMealTitle by remember { mutableStateOf("") }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+            value = newMealTitle,
+            onValueChange = { newMealTitle = it },
+            placeholder = { Text("z. B. Brunch") },
+            singleLine = true,
+            modifier = Modifier.weight(1f),
+        )
+        OutlinedButton(
+            enabled = newMealTitle.isNotBlank(),
+            onClick = {
+                val t = newMealTitle.trim()
+                update { it.copy(mealEventTitles = it.mealEventTitles + t) }
+                newMealTitle = ""
+            },
+        ) { Text("Hinzufügen") }
+    }
+    Text(
+        "Zählt, wenn eines der Wörter im Termin-Titel vorkommt (z. B. „Frühstück“ oder „Essen mit Anna“). " +
+            "Achtung: Auch „Fahrt nach Essen“ zählt dann – solche Wörter lieber entfernen.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+
+    Label("Vorwarnungen vor Essens-Terminen")
+    var customOffset by remember { mutableStateOf(false) }
+    /** Eigene Zeiten bleiben sichtbar, solange die Seite offen ist – auch abgewählt, zum Wieder-Anwählen. */
+    var customSeen by remember { mutableStateOf(emptySet<Int>()) }
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.testTag("meal-offsets"),
+    ) {
+        (MEAL_OFFSET_CHOICES + s.mealOffsets + customSeen).distinct().sorted().forEach { m ->
+            FilterChip(
+                selected = m in s.mealOffsets,
+                onClick = {
+                    if (m !in MEAL_OFFSET_CHOICES) customSeen = customSeen + m
+                    update { it.copy(mealOffsets = it.mealOffsets.toggle(m)) }
+                },
+                label = { Text(offsetChipLabel(m)) },
+            )
+        }
+        AssistChip(
+            onClick = { customOffset = true },
+            label = { Text("Eigene Zeit") },
+            leadingIcon = { Icon(Icons.Filled.Add, null, Modifier.size(18.dp)) },
+        )
+    }
+    Text(
+        mealOffsetsSummary(s),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+
+    SwitchSetting(
+        "Nach dem Essen ans Eintragen erinnern",
+        "Normale Benachrichtigung nach Essens-Terminen mit „Per Foto“ und „Per Chat“ – kein Vollbild, kein Klingeln",
+        s.mealReminders,
+    ) { v -> update { it.copy(mealReminders = v) } }
+    if (s.mealReminders) {
+        Label("Wann nach dem Ende des Termins")
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(0, 5, 10, 15, 30).forEach { m ->
+                FilterChip(
+                    selected = m == s.mealReminderMinutesAfter,
+                    onClick = { update { it.copy(mealReminderMinutesAfter = m) } },
+                    label = { Text(if (m == 0) "Sofort" else "$m Min. später") },
+                )
+            }
+        }
+        Text(
+            "Die Erinnerung zum Eintragen kommt auch nach Terminen, die oben bei „Keine Erinnerung“ stehen.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+
+    if (customOffset) {
+        CustomOffsetDialog(
+            onDismiss = { customOffset = false },
+            onPick = { m ->
+                if (m !in MEAL_OFFSET_CHOICES) customSeen = customSeen + m
+                update { it.copy(mealOffsets = it.mealOffsets + m) }
+            },
+        )
+    }
+}
+
+/** Eigene Vorwarnzeit in Minuten eingeben (1 Min. bis 24 Std.). */
+@Composable
+private fun CustomOffsetDialog(onDismiss: () -> Unit, onPick: (Int) -> Unit) {
+    var text by remember { mutableStateOf("") }
+    val minutes = text.trim().toIntOrNull()?.takeIf { it in 1..MAX_CUSTOM_OFFSET_MINUTES }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Eigene Vorwarnzeit") },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { v -> text = v.filter { it.isDigit() }.take(4) },
+                label = { Text("Minuten vorher") },
+                placeholder = { Text("z. B. 25") },
+                singleLine = true,
+                isError = text.isNotEmpty() && minutes == null,
+                supportingText = { Text("1 Minute bis 24 Stunden (1440 Minuten)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.testTag("custom-offset"),
+            )
+        },
+        confirmButton = {
+            TextButton(enabled = minutes != null, onClick = { minutes?.let(onPick); onDismiss() }) { Text("Hinzufügen") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } },
+    )
+}
+
+private const val MAX_CUSTOM_OFFSET_MINUTES = 24 * 60
 
 @Composable
 internal fun Section(title: String) {

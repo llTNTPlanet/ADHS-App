@@ -3,6 +3,7 @@ package de.lltntplanet.adhsapp.data.routines
 import de.lltntplanet.adhsapp.data.db.RoutineEntity
 import de.lltntplanet.adhsapp.data.db.RoutineLogEntity
 import de.lltntplanet.adhsapp.util.Dates
+import de.lltntplanet.adhsapp.util.TimeFormat
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.ZoneId
@@ -42,8 +43,74 @@ object RoutineLogic {
 
     fun weekdays(mask: Int): List<DayOfWeek> = DayOfWeek.entries.filter { hasWeekday(mask, it) }
 
-    fun occursOn(routine: RoutineEntity, date: LocalDate): Boolean =
-        routine.active && hasWeekday(routine.weekdays, date.dayOfWeek)
+    fun occursOn(routine: RoutineEntity, date: LocalDate): Boolean = routine.active && when (val once = routine.onceEpochDay) {
+        null -> hasWeekday(routine.weekdays, date.dayOfWeek)
+        else -> date.toEpochDay() == once
+    }
+
+    fun onceDate(routine: RoutineEntity): LocalDate? = routine.onceEpochDay?.let { LocalDate.ofEpochDay(it) }
+
+    /** Einmaliger Eintrag, dessen Tag schon vorbei ist (am Tag selbst gilt er noch als anstehend). */
+    fun isPastOnce(routine: RoutineEntity, today: LocalDate): Boolean =
+        routine.onceEpochDay?.let { it < today.toEpochDay() } == true
+
+    /** Wie oft: „Täglich“, „Mo–Fr“ … bzw. „Einmalig am Do. 30. Okt.“ (Heute/Morgen statt Datum, wenn passend). */
+    fun scheduleText(routine: RoutineEntity, today: LocalDate = LocalDate.now()): String =
+        onceDate(routine)?.let { "Einmalig ${onceDayText(it, today)}" } ?: weekdaysText(routine.weekdays)
+
+    private fun onceDayText(date: LocalDate, today: LocalDate): String = when (date) {
+        today -> "heute"
+        today.plusDays(1) -> "morgen"
+        today.minusDays(1) -> "gestern"
+        else -> "am ${TimeFormat.weekdayShort(date.dayOfWeek)} ${TimeFormat.dayMonthShort(date)}" +
+            if (date.year != today.year) " ${date.year}" else ""
+    }
+
+    /**
+     * Vorschlag für das Datum eines neuen einmaligen Eintrags: heute, solange noch eine der Uhrzeiten
+     * bevorsteht, sonst morgen.
+     */
+    fun suggestedOnceDate(times: List<Int>, now: Long, zone: ZoneId): LocalDate {
+        val today = Dates.toLocalDate(now, zone)
+        return if (times.any { Dates.atMinutes(today, it, zone) > now }) today else today.plusDays(1)
+    }
+
+    /** Uhrzeiten eines einmaligen Eintrags am [date], die schon vorbei sind (aufsteigend). */
+    fun pastTimes(date: LocalDate, times: List<Int>, now: Long, zone: ZoneId): List<Int> =
+        times.filter { Dates.atMinutes(date, it, zone) <= now }.distinct().sorted()
+
+    /** Liegen alle Uhrzeiten eines einmaligen Eintrags am [date] schon in der Vergangenheit? */
+    fun allTimesPast(date: LocalDate, times: List<Int>, now: Long, zone: ZoneId): Boolean =
+        times.isNotEmpty() && pastTimes(date, times, now, zone).size == times.distinct().size
+
+    /** Kommt für eine schon vergangene Uhrzeit noch die nachgeholte Erinnerung (bis [CATCH_UP_MILLIS] danach)? */
+    fun catchesUp(date: LocalDate, minutes: Int, now: Long, zone: ZoneId): Boolean =
+        now - Dates.atMinutes(date, minutes, zone) < CATCH_UP_MILLIS
+
+    /**
+     * Hinweis, wenn Uhrzeiten eines einmaligen Eintrags schon vorbei sind – und was dann passiert: bis zu drei Stunden
+     * danach kommt die Erinnerung sofort nach dem Speichern (wie bei regelmäßigen Routinen), später gar nicht mehr.
+     */
+    fun pastTimesHint(date: LocalDate, times: List<Int>, now: Long, zone: ZoneId): String? {
+        val past = pastTimes(date, times, now, zone)
+        if (past.isEmpty()) return null
+        fun list(minutes: List<Int>) = minutes.joinToString(", ") { TimeFormat.minutesOfDay(it) } + " Uhr"
+        val all = past.size == times.distinct().size
+        val subject = when {
+            all && past.size == 1 -> "Die Uhrzeit ist schon vorbei"
+            all -> "Die Uhrzeiten sind schon vorbei"
+            past.size == 1 -> "${list(past)} ist schon vorbei"
+            else -> "${list(past)} sind schon vorbei"
+        }
+        val catchUp = past.filter { catchesUp(date, it, now, zone) }
+        val consequence = when {
+            catchUp.isEmpty() -> "dazu kommt keine Erinnerung mehr"
+            catchUp.size == past.size && past.size == 1 -> "die Erinnerung dazu kommt gleich nach dem Speichern"
+            catchUp.size == past.size -> "die Erinnerungen dazu kommen gleich nach dem Speichern"
+            else -> "nur für ${list(catchUp)} kommt die Erinnerung noch, gleich nach dem Speichern"
+        }
+        return "$subject – $consequence."
+    }
 
     /** Kurztext für die Wochentage, z. B. „Täglich“, „Mo–Fr“, „Mo, Mi, Fr“. */
     fun weekdaysText(mask: Int): String {
