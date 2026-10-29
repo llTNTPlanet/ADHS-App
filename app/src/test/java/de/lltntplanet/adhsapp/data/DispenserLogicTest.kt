@@ -66,6 +66,30 @@ class DispenserLogicTest {
         assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("", "Have you taken your pills?"))
         assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("", "Hast du deine Medikamente genommen?"))
         assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("", "Your medication needs to be taken now"))
+        // Weitere Verneinungen.
+        assertEquals(DispenserEventKind.MISSED, DispenserLogic.classify("", "No pills taken yet"))
+        assertEquals(DispenserEventKind.MISSED, DispenserLogic.classify("", "Fach geöffnet, aber nichts entnommen"))
+        assertEquals(DispenserEventKind.MISSED, DispenserLogic.classify("", "Es wurden noch keinerlei Medikamente entnommen"))
+        assertEquals(DispenserEventKind.MISSED, DispenserLogic.classify("", "Fach geöffnet, ohne dass Medikamente entnommen wurden"))
+        assertEquals(DispenserEventKind.MISSED, DispenserLogic.classify("", "Medication hasn´t been taken"))
+        assertEquals(DispenserEventKind.MISSED, DispenserLogic.classify("", "Medication wasnt taken"))
+        // Bedingungen und Rückblicke in Erinnerungen.
+        assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("", "Zeit für deine Medikamente. Falls bereits eingenommen, diese Meldung ignorieren."))
+        assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("", "Einnahmezeit! Wenn du deine Medikamente schon genommen hast, ignoriere diese Nachricht."))
+        assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("", "Time to take your medicine. Ignore if already taken"))
+        assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("", "Time for your 2:00 PM dose. Last dose taken at 8:00 AM"))
+    }
+
+    @Test
+    fun otherSentencesDoNotUndoATakenMessage() {
+        assertEquals(DispenserEventKind.TAKEN, DispenserLogic.classify("", "Medikament entnommen. Bitte Fach schließen."))
+        assertEquals(DispenserEventKind.TAKEN, DispenserLogic.classify("", "Medication taken. Next dose not until 14:00"))
+        assertEquals(DispenserEventKind.TAKEN, DispenserLogic.classify("", "Medikament genommen – keine weiteren Einnahmen heute"))
+        assertEquals(DispenserEventKind.TAKEN, DispenserLogic.classify("", "Medikament genommen. Vergiss nicht, das Fach zu schließen"))
+        assertEquals(DispenserEventKind.TAKEN, DispenserLogic.classify("", "Pills taken. Don't forget to refill"))
+        assertEquals(DispenserEventKind.TAKEN, DispenserLogic.classify("Medikament genommen", "Bitte bald nachfüllen"))
+        // Medikament endet auf „nt“ – das ist keine Verneinung.
+        assertEquals(DispenserEventKind.TAKEN, DispenserLogic.classify("Memio Go", "Medikament entnommen"))
     }
 
     @Test
@@ -132,14 +156,16 @@ class DispenserLogicTest {
     }
 
     @Test
-    fun textTimeCountsOnlyWhenItIsTheOnlyOneAndStillOpen() {
-        // Zwei Uhrzeiten im Text: keine davon gilt, sondern die letzte Einnahmezeit (14:00).
+    fun textTimeCountsWhenItNamesExactlyOneSlot() {
+        // Einnahmezeit und Entnahmezeit im Text: Die genannte Einnahmezeit 08:00 gilt.
+        assertEquals(480, DispenserLogic.matchTaken(listOf(morning), emptyList(), millis("2026-10-26T14:06"), Berlin, listOf(480, 845))!!.minutes)
+        // Zwei Einnahmezeiten im Text: unklar, also die letzte Einnahmezeit davor.
         assertEquals(840, DispenserLogic.matchTaken(listOf(morning), emptyList(), millis("2026-10-26T14:30"), Berlin, listOf(480, 840))!!.minutes)
-        // 08:00 ist schon abgehakt: dann zählt die letzte Einnahmezeit.
+        // 08:00 ist schon abgehakt und wird verspätet noch einmal gemeldet: nichts abhaken, auch nicht 14:00.
         val log = listOf(RoutineLogEntity(routineId = 1, epochDay = monday.toEpochDay(), minutes = 480))
         val match = DispenserLogic.matchTaken(listOf(morning), log, millis("2026-10-26T14:30"), Berlin, listOf(480))
-        assertEquals(840, match!!.minutes)
-        assertEquals(listOf(1L), match.open.map { it.routine.id })
+        assertEquals(480, match!!.minutes)
+        assertTrue(match.open.isEmpty())
     }
 
     @Test
@@ -189,6 +215,14 @@ class DispenserLogicTest {
         assertTrue(entry.byDispenser)
         assertEquals(5L, entry.doneAt)
         assertEquals(1, changes)
+    }
+
+    @Test
+    fun tickFromReminderTurnsSkippedIntoTaken() = runTest {
+        val routineDao = FakeRoutineDao(listOf(vitamin))
+        routineDao.insertLog(RoutineLogEntity(routineId = 2, epochDay = monday.toEpochDay(), minutes = 480, skipped = true))
+        RoutineRepository(routineDao) {}.setDoneAt(2, millis("2026-10-26T08:00"), Berlin)
+        assertFalse(routineDao.logEntries.single().skipped)
     }
 
     @Test

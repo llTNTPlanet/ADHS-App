@@ -73,7 +73,7 @@ class ReminderEngine(
         result += ReminderPlanner.planRoutines(
             routineDao.active(), routineDao.log(fromDay.toEpochDay(), toDay.toEpochDay()), fromDay, toDay, zone,
             dispenserDelayMinutes = s.dispenserReminderDelay.takeIf { it >= 0 },
-            dispenserWatched = DispenserListener.isEnabled(context),
+            dispenserWatched = DispenserListener.isWatching(context),
         )
         val snoozes = reminderDao.snoozes().mapNotNull { snooze ->
             runCatching { GoogleJson.decodeFromString<Reminder>(snooze.payload) }.getOrNull()

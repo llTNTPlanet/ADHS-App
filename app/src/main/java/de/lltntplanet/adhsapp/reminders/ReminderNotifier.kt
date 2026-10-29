@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
 import android.media.RingtoneManager
+import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
@@ -83,6 +84,7 @@ class ReminderNotifier(private val context: Context) {
                     .setWhen(r.targetTime ?: r.triggerAt)
                     .setShowWhen(true)
                     .setContentIntent(activityIntent(listOf(r), r.notificationId))
+                    .addExtras(Bundle().apply { putString(EXTRA_ORIGIN_KEY, r.originKey ?: r.key) })
                     .addAction(0, "10 Min. später", ReminderActionReceiver.pendingIntent(context, ReminderActionReceiver.ACTION_SNOOZE, r, 10))
                 if ((r.kind == ReminderKind.TASK || r.kind.isRoutine) && r.refId != null) {
                     val label = if (r.kind == ReminderKind.MEDICATION) "Genommen" else "Erledigt"
@@ -160,9 +162,15 @@ class ReminderNotifier(private val context: Context) {
         NotificationManagerCompat.from(context).cancel(reminder.notificationId)
     }
 
-    /** Benachrichtigung zu einem Erinnerungs-Schlüssel entfernen (z. B. „rt:…“, wenn der Spender die Einnahme meldet). */
+    /**
+     * Benachrichtigung zu einem Erinnerungs-Schlüssel entfernen (z. B. „rt:…“, wenn der Spender die Einnahme meldet) –
+     * auch eine schon angezeigte geschlummerte Wiederholung davon.
+     */
     fun cancelKey(key: String) {
-        NotificationManagerCompat.from(context).cancel(key.hashCode())
+        val nm = NotificationManagerCompat.from(context)
+        nm.cancel(key.hashCode())
+        val active = runCatching { context.getSystemService(NotificationManager::class.java)?.activeNotifications }.getOrNull() ?: return
+        active.filter { it.notification.extras.getString(EXTRA_ORIGIN_KEY) == key }.forEach { nm.cancel(it.tag, it.id) }
     }
 
     private fun activityIntent(reminders: List<Reminder>, requestCode: Int): PendingIntent =
@@ -184,6 +192,8 @@ class ReminderNotifier(private val context: Context) {
         const val CHANNEL_INFO = "info"
         private const val FULL_SCREEN_REQUEST = 4711
         private const val DEFAULT_COLOR = 0xFF0B57D0.toInt()
+        /** Schlüssel der ursprünglichen Erinnerung – auch bei geschlummerten Wiederholungen. */
+        private const val EXTRA_ORIGIN_KEY = "de.lltntplanet.adhsapp.ORIGIN_KEY"
     }
 }
 
