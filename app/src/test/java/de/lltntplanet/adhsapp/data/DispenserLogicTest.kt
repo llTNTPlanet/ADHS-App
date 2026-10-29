@@ -90,6 +90,89 @@ class DispenserLogicTest {
         assertEquals(DispenserEventKind.TAKEN, DispenserLogic.classify("Medikament genommen", "Bitte bald nachfüllen"))
         // Medikament endet auf „nt“ – das ist keine Verneinung.
         assertEquals(DispenserEventKind.TAKEN, DispenserLogic.classify("Memio Go", "Medikament entnommen"))
+        // Ein allgemeiner Titel wie „Erinnerung“ verhindert die Einnahme nicht.
+        assertEquals(DispenserEventKind.TAKEN, DispenserLogic.classify("Medication reminder", "Medicine taken"))
+    }
+
+    @Test
+    fun pointsInDatesAndAbbreviationsDoNotSplitOffANegation() {
+        assertEquals(DispenserEventKind.MISSED, DispenserLogic.classify("", "Kein Medikament am 29.10. entnommen"))
+        assertEquals(DispenserEventKind.MISSED, DispenserLogic.classify("", "Kein Medikament am 29.10. Abends entnommen"))
+        assertEquals(DispenserEventKind.MISSED, DispenserLogic.classify("", "Kein Medikament aus Fach Nr. 3 entnommen"))
+        assertEquals(DispenserEventKind.MISSED, DispenserLogic.classify("", "Not all of your 8:00 a.m. pills were taken"))
+        assertEquals(DispenserEventKind.MISSED, DispenserLogic.classify("", "Eingenommen: Nein"))
+        assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("", "If your 8:00 a.m. dose was taken, swipe to dismiss."))
+    }
+
+    @Test
+    fun remindersThatMentionAnEarlierDoseAreNotTaken() {
+        assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("", "Bitte jetzt die 20:00-Dosis einnehmen. Die 08:00-Dosis wurde genommen."))
+        assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("", "Please take your 8:00 PM dose now. Morning dose taken."))
+        assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("", "Morgendosis wurde genommen. Bitte nimm jetzt deine Abenddosis."))
+        assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("Medication reminder", "Have you taken your 8:00 AM medicine? Tap to mark it as taken."))
+        assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("", "Haben Sie Ihre Medikamente eingenommen? Tippen Sie auf „Eingenommen“."))
+        assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("", "Time for your evening dose. Today: 1 of 2 doses taken."))
+        assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("", "Take your medicine and tap Taken when done"))
+        // „Verpasst“ hat Vorrang, auch wenn ein anderer Satz „entnommen“ meldet.
+        assertEquals(DispenserEventKind.MISSED, DispenserLogic.classify("", "Einnahme um 14:00 verpasst. Morgendosis um 08:02 entnommen."))
+        assertEquals(DispenserEventKind.MISSED, DispenserLogic.classify("", "Dose missed. Taken: 0/1"))
+    }
+
+    @Test
+    fun timesComeOnlyFromTheTakenSentence() {
+        val late = DispenserLogic.read("", "Medikament um 14:03 entnommen. Die Einnahme um 08:00 ist noch offen.")
+        assertEquals(DispenserEventKind.TAKEN, late.kind)
+        assertEquals(listOf(843), DispenserLogic.timesIn(late.takenText))
+        assertEquals(listOf(480, 845), DispenserLogic.timesIn(DispenserLogic.read("", "Dosis 08:00 um 14:05 entnommen").takenText))
+        // Damit gehört die Meldung um 14:03 zur Einnahme 14:00, nicht zur offenen 08:00.
+        val match = DispenserLogic.matchTaken(listOf(morning), emptyList(), millis("2026-10-26T14:03"), Berlin, DispenserLogic.timesIn(late.takenText))
+        assertEquals(840, match!!.minutes)
+        // Andersherum genauso: Der Satz über die offene Einnahme liefert keine Uhrzeit.
+        val reversed = DispenserLogic.read("", "Die Einnahme um 08:00 ist noch offen. Medikament um 14:03 entnommen.")
+        assertEquals(DispenserEventKind.TAKEN, reversed.kind)
+        assertEquals(listOf(843), DispenserLogic.timesIn(reversed.takenText))
+        // Steht die offene Einnahme im selben Satz, ist unklar, welche genommen wurde.
+        assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("", "Medikament um 14:03 entnommen, Einnahme um 08:00 noch offen"))
+        assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("", "Medication taken at 2:03 PM, 8:00 AM dose still pending"))
+    }
+
+    @Test
+    fun timeLabelInTitleOrNextToTheTakenSentenceNamesTheSlot() {
+        assertEquals(listOf(360), DispenserLogic.timesIn(DispenserLogic.read("Alarm 1 (6:00AM)", "Medicine taken").takenText))
+        assertEquals(listOf(360), DispenserLogic.timesIn(DispenserLogic.read("", "6:00 a.m. Medicine taken").takenText))
+        assertEquals(listOf(360), DispenserLogic.timesIn(DispenserLogic.read("", "Medikament entnommen – 06:00 Uhr").takenText))
+        // Andere Zeilen zählen weiter nicht.
+        assertEquals(emptyList<Int>(), DispenserLogic.timesIn(DispenserLogic.read("", "Medikament entnommen.\nNächste Einnahme:\n14:00").takenText))
+        // Um 14:30 gemeldet, der Titel nennt die Morgen-Einnahme: Die wird abgehakt, nicht die von 14:00.
+        val late = DispenserLogic.read("Alarm 1 08:00", "Medikament entnommen")
+        assertEquals(DispenserEventKind.TAKEN, late.kind)
+        val match = DispenserLogic.matchTaken(listOf(morning), emptyList(), millis("2026-10-26T14:30"), Berlin, DispenserLogic.timesIn(late.takenText))
+        assertEquals(480, match!!.minutes)
+    }
+
+    @Test
+    fun trailingNoSettingsAndConditionsAreNotTaken() {
+        // „– Nein“ oder „– noch nicht“ nach der Meldung verneint sie.
+        assertEquals(DispenserEventKind.MISSED, DispenserLogic.classify("Alarm 1 (6:00AM)", "Medicine taken - No"))
+        assertEquals(DispenserEventKind.MISSED, DispenserLogic.classify("", "Medikament eingenommen - noch nicht"))
+        assertEquals(DispenserEventKind.MISSED, DispenserLogic.classify("", "Medicine taken – No"))
+        assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("", "Medicine taken - please confirm"))
+        // Einstellungen übernommen ist keine Einnahme.
+        assertEquals(DispenserEventKind.OTHER, DispenserLogic.classify("", "The new medication plan has taken effect"))
+        assertEquals(DispenserEventKind.OTHER, DispenserLogic.classify("Alarm 1 (6:00AM)", "has taken effect"))
+        // Bedingungen, weitere Verneinungen und Satzzeichen aus chinesischer Eingabe.
+        assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("", "The alarm will repeat every 5 minutes until the medicine is taken"))
+        assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("", "Der Alarm ertönt alle 5 Minuten, bis die Tabletten entnommen wurden"))
+        assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("", "Prüfen Sie, ob das Medikament eingenommen wurde"))
+        assertEquals(DispenserEventKind.MISSED, DispenserLogic.classify("", "Alarm stopped without the medicine being taken"))
+        assertEquals(DispenserEventKind.MISSED, DispenserLogic.classify("", "Pill box jammed, medicine cannot be taken"))
+        assertEquals(DispenserEventKind.MISSED, DispenserLogic.classify("", "Medicine couldnt be taken"))
+        assertEquals(DispenserEventKind.MISSED, DispenserLogic.classify("", "Medicine hasn‘t been taken"))
+        assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("", "Medicine taken？"))
+        // Schlichte Meldungen bleiben „genommen“.
+        assertEquals(DispenserEventKind.TAKEN, DispenserLogic.classify("", "Medication has been taken"))
+        assertEquals(DispenserEventKind.TAKEN, DispenserLogic.classify("", "Pills taken at 6:00AM"))
+        assertEquals(DispenserEventKind.TAKEN, DispenserLogic.classify("Maginon SMD-1 Smart Medication Dispenser", "Medicine taken"))
     }
 
     @Test
@@ -113,6 +196,7 @@ class DispenserLogicTest {
         assertEquals(listOf(1200), DispenserLogic.timesIn("Your 8:00 PM dose was taken"))
         assertEquals(listOf(1200), DispenserLogic.timesIn("8:00 pm Medikament genommen"))
         assertEquals(listOf(30), DispenserLogic.timesIn("12:30 AM dose"))
+        assertEquals(listOf(1200), DispenserLogic.timesIn("Medication taken at 8:00 p.m"))
         // Uhrzeiten der nächsten Einnahme zählen nicht.
         assertEquals(emptyList<Int>(), DispenserLogic.timesIn("Medikament genommen. Nächste Einnahme: 14:00"))
         assertEquals(listOf(480), DispenserLogic.timesIn("Taken at 8:00 a.m., next dose at 2:00 p.m."))

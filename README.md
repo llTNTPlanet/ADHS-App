@@ -266,8 +266,11 @@ Handy. „Liste leeren“ blendet die Meldungen nur aus.
   Berechtigung `WRITE_NUTRITION`, Erklärungs-Activity für den Berechtigungsdialog
 - Medikamentenspender: `NotificationListenerService` (`DispenserListener`) für die Pakete `com.dispenser`
   (iDispenser, Tuya-Hersteller-App) sowie `com.tuya.smartlife`/`com.tuya.smart`; Einordnung per Stichwörtern als
-  ganze Wörter (Deutsch/Englisch; satzweise, Sätze mit Verneinung, Frage, Aufforderung oder Bedingung zählen nicht,
-  bei Sammel-Benachrichtigungen nur die neueste Zeile) und Zuordnung zur letzten Einnahmezeit davor (5 Min. Toleranz,
+  ganze Wörter (Deutsch/Englisch; „genommen“ nur ohne „verpasst“, ohne Verneinung bis zum „genommen“-Satz, ohne Frage,
+  Aufforderung oder Erinnerung davor, ohne „noch offen“ im selben Satz und ohne Aufforderung zum Einnehmen oder
+  bloßes „– Nein“ danach; „has taken effect“ zählt nicht; Sätze nur an echten Satzgrenzen und Gedankenstrichen
+  getrennt, Uhrzeiten nur aus dem „genommen“-Satz und reinen Zeitangaben im Titel oder direkt daneben wie
+  „Alarm 1 (6:00AM)“; bei Sammel-Benachrichtigungen nur die neueste Zeile) und Zuordnung zur letzten Einnahmezeit davor (5 Min. Toleranz,
   höchstens 12 Std. zurück; nennt der Text genau eine Einnahmezeit, gilt sie – ist sie schon abgehakt, wird nichts
   abgehakt; Zeiten nach „nächste“/„next“ zählen nicht) in `DispenserLogic`; Room-Tabelle `dispenser_events`, `routines.dispenser`,
   `routine_log.byDispenser` (DB-Version 6)
