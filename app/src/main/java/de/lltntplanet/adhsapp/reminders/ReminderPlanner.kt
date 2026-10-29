@@ -195,11 +195,13 @@ object ReminderPlanner {
         toInclusive: LocalDate,
         zone: ZoneId,
         dispenserDelayMinutes: Int? = 0,
+        /** Liest die App den Spender überhaupt mit (Benachrichtigungszugriff)? Sonst wie jedes andere Medikament. */
+        dispenserWatched: Boolean = true,
     ): List<Reminder> =
         RoutineLogic.occurrences(routines, log, from, toInclusive, zone)
             .filter { !it.done && !it.skipped }
             .mapNotNull { o ->
-                val inDispenser = o.routine.dispenser && o.routine.kind == RoutineKind.MEDICATION
+                val inDispenser = dispenserWatched && o.routine.dispenser && o.routine.kind == RoutineKind.MEDICATION
                 val delayMinutes = if (inDispenser) dispenserDelayMinutes ?: return@mapNotNull null else 0
                 val detail = listOfNotNull(
                     o.routine.dose.ifBlank { null },

@@ -17,6 +17,8 @@ data class DispenserNotification(
     val postedAt: Long,
     val title: String,
     val text: String,
+    /** Bei Sammel-Benachrichtigungen mit mehreren Zeilen die neueste – nur sie wird eingeordnet. */
+    val latestLine: String? = null,
 )
 
 /** Meldungen des Medikamentenspenders speichern und „genommen“ im Medikamenten-Modul abhaken. */
@@ -28,7 +30,8 @@ class DispenserRepository(
 ) {
     private val mutex = Mutex()
 
-    fun observeRecent(limit: Int = 20): Flow<List<DispenserEventEntity>> = dao.observeRecent(limit)
+    /** Die neuesten Meldungen nach [after] („Liste leeren“ merkt sich nur diesen Zeitpunkt). */
+    fun observeRecent(limit: Int = 20, after: Long = 0): Flow<List<DispenserEventEntity>> = dao.observeRecent(after, limit)
 
     /**
      * Neue Benachrichtigung der Spender-App verarbeiten. Gibt das gespeicherte Ereignis zurück, oder null,
@@ -37,9 +40,11 @@ class DispenserRepository(
     suspend fun onNotification(n: DispenserNotification, zone: ZoneId = ZoneId.systemDefault()): DispenserEventEntity? {
         return mutex.withLock {
             if (n.title.isBlank() && n.text.isBlank()) return null
-            val kind = DispenserLogic.classify(n.title, n.text)
-            // Smart Life & Co. melden auch Lampen und Steckdosen – von dort nur erkannte Spender-Meldungen behalten.
-            if (kind == DispenserEventKind.OTHER && !DispenserLogic.isDedicatedApp(n.packageName)) return null
+            val dedicated = DispenserLogic.isDedicatedApp(n.packageName)
+            // Smart Life & Co. melden auch Lampen und Kameras – von dort nur Meldungen behalten, die den Spender nennen.
+            if (!dedicated && !DispenserLogic.mentionsDispenser(n.title, n.text)) return null
+            val subject = n.latestLine ?: n.text
+            val kind = DispenserLogic.classify(n.title, subject)
             var event = DispenserEventEntity(
                 postedAt = n.postedAt,
                 notificationKey = n.key,
@@ -48,14 +53,15 @@ class DispenserRepository(
                 text = n.text.take(MAX_TEXT),
                 kind = kind,
             )
-            val match = if (kind == DispenserEventKind.TAKEN) {
+            // Abhaken nur, wenn die App des Spenders selbst „genommen“ meldet.
+            val match = if (kind == DispenserEventKind.TAKEN && dedicated) {
                 val day = Dates.toLocalDate(n.postedAt, zone)
                 DispenserLogic.matchTaken(
                     routines.active(),
                     routines.log(day.minusDays(1), day),
                     n.postedAt,
                     zone,
-                    DispenserLogic.timesIn("${n.title} ${n.text}"),
+                    DispenserLogic.timesIn("${n.title}\n$subject"),
                 )
             } else {
                 null
@@ -79,8 +85,6 @@ class DispenserRepository(
             event
         }
     }
-
-    suspend fun clear() = dao.clear()
 
     suspend fun purgeOld(days: Long, now: Long = System.currentTimeMillis()) = dao.purge(now - days * DAY_MILLIS)
 

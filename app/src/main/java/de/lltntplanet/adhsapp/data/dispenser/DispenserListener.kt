@@ -33,13 +33,15 @@ class DispenserListener : NotificationListenerService() {
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
         val extras = n.extras ?: return
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
-        val lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)?.joinToString("\n")
-        val text = (extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString() ?: lines
-            ?: extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()).orEmpty()
+        val lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)?.map { it.toString() }?.filter { it.isNotBlank() }
+        val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
+        val text = (bigText ?: lines?.joinToString("\n") ?: extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()).orEmpty()
+        // Sammel-Benachrichtigung: Ältere Zeilen („08:00 genommen“) dürfen eine neue Meldung nicht umdeuten.
+        val latest = if (bigText == null && lines != null && lines.size > 1) lines.last() else null
         val c = (applicationContext as AdhsApp).container
         c.scope.launch {
             runCatching {
-                c.dispenser.onNotification(DispenserNotification(sbn.packageName, sbn.key, sbn.postTime, title, text))
+                c.dispenser.onNotification(DispenserNotification(sbn.packageName, sbn.key, sbn.postTime, title, text, latest))
             }.onFailure { Log.e(TAG, "Spender-Meldung konnte nicht verarbeitet werden", it) }
         }
     }

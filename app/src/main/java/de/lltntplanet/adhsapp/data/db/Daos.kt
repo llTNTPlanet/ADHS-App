@@ -194,8 +194,8 @@ interface MoodDao {
 
 @Dao
 interface DispenserDao {
-    @Query("SELECT * FROM dispenser_events ORDER BY postedAt DESC LIMIT :limit")
-    fun observeRecent(limit: Int): Flow<List<DispenserEventEntity>>
+    @Query("SELECT * FROM dispenser_events WHERE postedAt > :after ORDER BY postedAt DESC LIMIT :limit")
+    fun observeRecent(after: Long, limit: Int): Flow<List<DispenserEventEntity>>
 
     /** -1, wenn dieselbe Benachrichtigung schon gespeichert ist. */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
@@ -203,7 +203,4 @@ interface DispenserDao {
 
     @Query("DELETE FROM dispenser_events WHERE postedAt < :before")
     suspend fun purge(before: Long)
-
-    @Query("DELETE FROM dispenser_events")
-    suspend fun clear()
 }

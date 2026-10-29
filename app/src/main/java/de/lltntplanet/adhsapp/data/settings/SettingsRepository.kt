@@ -50,6 +50,8 @@ data class AppSettings(
      * nur falls der Spender bis dahin keine Entnahme gemeldet hat. 0 = gleichzeitig, -1 = keine eigene Erinnerung.
      */
     val dispenserReminderDelay: Int = 30,
+    /** „Liste leeren“ beim Spender: Meldungen bis zu diesem Zeitpunkt werden nicht mehr angezeigt. */
+    val dispenserClearedAt: Long = 0,
     val allDayReminders: Boolean = true,
     val allDayReminderMinutes: Int = 8 * 60,
     val birthdayReminders: Boolean = true,
@@ -118,6 +120,7 @@ class SettingsRepository(private val context: Context) {
         val mealOffsets = stringSetPreferencesKey("meal_offsets")
         val mealEventTitles = stringSetPreferencesKey("meal_event_titles")
         val dispenserReminderDelay = intPreferencesKey("dispenser_reminder_delay")
+        val dispenserClearedAt = longPreferencesKey("dispenser_cleared_at")
         val allDayReminders = booleanPreferencesKey("all_day_reminders")
         val allDayReminderMinutes = intPreferencesKey("all_day_reminder_minutes")
         val birthdayReminders = booleanPreferencesKey("birthday_reminders")
@@ -174,6 +177,7 @@ class SettingsRepository(private val context: Context) {
             mealEventTitles = this[Keys.mealEventTitles] ?: d.mealEventTitles,
             mealOffsets = this[Keys.mealOffsets]?.mapNotNull { it.toIntOrNull() }?.toSet() ?: d.mealOffsets,
             dispenserReminderDelay = this[Keys.dispenserReminderDelay] ?: d.dispenserReminderDelay,
+            dispenserClearedAt = this[Keys.dispenserClearedAt] ?: d.dispenserClearedAt,
             allDayReminders = this[Keys.allDayReminders] ?: d.allDayReminders,
             allDayReminderMinutes = this[Keys.allDayReminderMinutes] ?: d.allDayReminderMinutes,
             birthdayReminders = this[Keys.birthdayReminders] ?: d.birthdayReminders,
@@ -235,6 +239,7 @@ class SettingsRepository(private val context: Context) {
         this[Keys.mealEventTitles] = s.mealEventTitles
         this[Keys.mealOffsets] = s.mealOffsets.map { it.toString() }.toSet()
         this[Keys.dispenserReminderDelay] = s.dispenserReminderDelay
+        this[Keys.dispenserClearedAt] = s.dispenserClearedAt
         this[Keys.allDayReminders] = s.allDayReminders
         this[Keys.allDayReminderMinutes] = s.allDayReminderMinutes
         this[Keys.birthdayReminders] = s.birthdayReminders

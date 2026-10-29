@@ -13,7 +13,9 @@ import de.lltntplanet.adhsapp.data.db.ReminderDao
 import de.lltntplanet.adhsapp.data.db.RoutineDao
 import de.lltntplanet.adhsapp.data.db.SnoozeEntity
 import de.lltntplanet.adhsapp.data.db.TaskDao
+import de.lltntplanet.adhsapp.data.dispenser.DispenserListener
 import de.lltntplanet.adhsapp.data.google.GoogleJson
+import de.lltntplanet.adhsapp.data.routines.RoutineLogic
 import de.lltntplanet.adhsapp.data.settings.SettingsRepository
 import de.lltntplanet.adhsapp.util.Dates
 import de.lltntplanet.adhsapp.util.Permissions
@@ -71,10 +73,20 @@ class ReminderEngine(
         result += ReminderPlanner.planRoutines(
             routineDao.active(), routineDao.log(fromDay.toEpochDay(), toDay.toEpochDay()), fromDay, toDay, zone,
             dispenserDelayMinutes = s.dispenserReminderDelay.takeIf { it >= 0 },
+            dispenserWatched = DispenserListener.isEnabled(context),
         )
-        result += reminderDao.snoozes().mapNotNull { snooze ->
+        val snoozes = reminderDao.snoozes().mapNotNull { snooze ->
             runCatching { GoogleJson.decodeFromString<Reminder>(snooze.payload) }.getOrNull()
-                ?.let { it.copy(key = "snooze:${snooze.id}", triggerAt = snooze.triggerAt, snoozed = true, originKey = it.originKey ?: it.key) }
+                ?.let { snooze.id to it.copy(key = "snooze:${snooze.id}", triggerAt = snooze.triggerAt, snoozed = true, originKey = it.originKey ?: it.key) }
+        }
+        // Inzwischen abgehakt (z. B. vom Medikamentenspender)? Dann entfällt die geschlummerte Erinnerung.
+        val doneKeys = if (snoozes.any { it.second.kind.isRoutine }) {
+            RoutineLogic.doneKeys(routineDao.log(fromDay.minusDays(1).toEpochDay(), toDay.toEpochDay()))
+        } else {
+            emptySet()
+        }
+        for ((id, r) in snoozes) {
+            if (r.kind.isRoutine && r.originKey in doneKeys) reminderDao.deleteSnooze(id) else result += r
         }
         return result.filter { it.snoozed || it.triggerAt in from..to }
     }

@@ -52,6 +52,32 @@ class DispenserLogicTest {
     }
 
     @Test
+    fun takenOnlyAsWholeWordWithoutNegationOrQuestion() {
+        // Andere Geräte und Wörter, die „genommen“ nur enthalten.
+        assertEquals(DispenserEventKind.OTHER, DispenserLogic.classify("Kamera", "Bewegung erkannt – Video aufgenommen"))
+        assertEquals(DispenserEventKind.OTHER, DispenserLogic.classify("Türklingel", "Anruf angenommen"))
+        // Verneint: verpasst, nicht genommen.
+        assertEquals(DispenserEventKind.MISSED, DispenserLogic.classify("", "Medikament wurde nicht rechtzeitig eingenommen"))
+        assertEquals(DispenserEventKind.MISSED, DispenserLogic.classify("", "Medication hasn't been taken yet"))
+        assertEquals(DispenserEventKind.MISSED, DispenserLogic.classify("", "Pills not yet taken"))
+        assertEquals(DispenserEventKind.MISSED, DispenserLogic.classify("", "Keine Tablette entnommen"))
+        // Fragen und Aufforderungen sind höchstens fällig.
+        assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("", "Ihre Medikamente sollten um 08:00 eingenommen werden"))
+        assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("", "Have you taken your pills?"))
+        assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("", "Hast du deine Medikamente genommen?"))
+        assertEquals(DispenserEventKind.DUE, DispenserLogic.classify("", "Your medication needs to be taken now"))
+    }
+
+    @Test
+    fun recognisesDispenserMessagesFromSmartHomeApps() {
+        assertTrue(DispenserLogic.mentionsDispenser("Memio Go", "Fach 2 geöffnet"))
+        assertTrue(DispenserLogic.mentionsDispenser("", "Medikament genommen"))
+        assertTrue(DispenserLogic.mentionsDispenser("Pill box", "Dose taken"))
+        assertFalse(DispenserLogic.mentionsDispenser("Kamera", "Snapshot taken"))
+        assertFalse(DispenserLogic.mentionsDispenser("Licht", "Wohnzimmer an"))
+    }
+
+    @Test
     fun readsTimesFromText() {
         assertEquals(listOf(480), DispenserLogic.timesIn("Einnahme um 08:00 Uhr"))
         assertEquals(listOf(480, 1230), DispenserLogic.timesIn("8:00 und 20:30"))
@@ -59,6 +85,13 @@ class DispenserLogicTest {
         assertEquals(listOf(30), DispenserLogic.timesIn("12:30 am"))
         // „am“ als deutsches Wort ist kein AM.
         assertEquals(listOf(750), DispenserLogic.timesIn("Einnahme 12:30 am Montag"))
+        // Englisches AM/PM auch vor weiteren Wörtern.
+        assertEquals(listOf(1200), DispenserLogic.timesIn("Your 8:00 PM dose was taken"))
+        assertEquals(listOf(1200), DispenserLogic.timesIn("8:00 pm Medikament genommen"))
+        assertEquals(listOf(30), DispenserLogic.timesIn("12:30 AM dose"))
+        // Uhrzeiten der nächsten Einnahme zählen nicht.
+        assertEquals(emptyList<Int>(), DispenserLogic.timesIn("Medikament genommen. Nächste Einnahme: 14:00"))
+        assertEquals(listOf(480), DispenserLogic.timesIn("Taken at 8:00 a.m., next dose at 2:00 p.m."))
         // Datum und ungültige Zeiten zählen nicht.
         assertEquals(emptyList<Int>(), DispenserLogic.timesIn("29.10.2026, 25:00, 123:45"))
     }
@@ -99,6 +132,17 @@ class DispenserLogicTest {
     }
 
     @Test
+    fun textTimeCountsOnlyWhenItIsTheOnlyOneAndStillOpen() {
+        // Zwei Uhrzeiten im Text: keine davon gilt, sondern die letzte Einnahmezeit (14:00).
+        assertEquals(840, DispenserLogic.matchTaken(listOf(morning), emptyList(), millis("2026-10-26T14:30"), Berlin, listOf(480, 840))!!.minutes)
+        // 08:00 ist schon abgehakt: dann zählt die letzte Einnahmezeit.
+        val log = listOf(RoutineLogEntity(routineId = 1, epochDay = monday.toEpochDay(), minutes = 480))
+        val match = DispenserLogic.matchTaken(listOf(morning), log, millis("2026-10-26T14:30"), Berlin, listOf(480))
+        assertEquals(840, match!!.minutes)
+        assertEquals(listOf(1L), match.open.map { it.routine.id })
+    }
+
+    @Test
     fun alreadyCheckedDosesStayAndOnlyDispenserMedsCount() {
         val log = listOf(RoutineLogEntity(routineId = 1, epochDay = monday.toEpochDay(), minutes = 480))
         val match = DispenserLogic.matchTaken(listOf(morning, vitamin), log, millis("2026-10-26T08:05"), Berlin)
@@ -127,6 +171,24 @@ class DispenserLogicTest {
         val afterTaken = ReminderPlanner.planRoutines(listOf(vitamin), log, monday, monday, Berlin, dispenserDelayMinutes = 30)
         assertTrue(afterTaken.isEmpty())
         assertTrue(RoutineLogic.occurrences(listOf(vitamin), log, monday, monday, Berlin).single().byDispenser)
+        assertEquals(setOf("rt:2:${monday.toEpochDay()}:480"), RoutineLogic.doneKeys(log))
+
+        // Ohne Benachrichtigungszugriff wie jedes andere Medikament: pünktlich und ohne Spender-Hinweis.
+        val unwatched = ReminderPlanner.planRoutines(listOf(vitamin), emptyList(), monday, monday, Berlin, 30, dispenserWatched = false)
+        assertEquals(millis("2026-10-26T08:00"), unwatched.single().triggerAt)
+        assertNull(unwatched.single().detail)
+    }
+
+    @Test
+    fun tickFromReminderKeepsDispenserEntry() = runTest {
+        val routineDao = FakeRoutineDao(listOf(vitamin))
+        routineDao.insertLog(RoutineLogEntity(routineId = 2, epochDay = monday.toEpochDay(), minutes = 480, doneAt = 5L, byDispenser = true))
+        var changes = 0
+        RoutineRepository(routineDao) { changes++ }.setDoneAt(2, millis("2026-10-26T08:00"), Berlin)
+        val entry = routineDao.logEntries.single()
+        assertTrue(entry.byDispenser)
+        assertEquals(5L, entry.doneAt)
+        assertEquals(1, changes)
     }
 
     @Test
@@ -168,14 +230,34 @@ class DispenserLogicTest {
             DispenserEventKind.OTHER,
             repo.onNotification(DispenserNotification("com.dispenser", "a", at, "Gerät offline", ""), Berlin)!!.kind,
         )
-        // Smart Life meldet auch Lampen: Unbekanntes von dort wird nicht gespeichert.
+        // Smart Life meldet auch Lampen und Kameras: Was den Spender nicht nennt, wird nicht gespeichert.
         assertNull(repo.onNotification(DispenserNotification("com.tuya.smartlife", "b", at, "Licht an", "Wohnzimmer"), Berlin))
+        assertNull(repo.onNotification(DispenserNotification("com.tuya.smartlife", "e", at, "Kamera", "Snapshot taken"), Berlin))
         assertEquals(
             DispenserEventKind.MISSED,
             repo.onNotification(DispenserNotification("com.tuya.smartlife", "c", at, "Pillendose", "Einnahme verpasst"), Berlin)!!.kind,
         )
         assertNull(repo.onNotification(DispenserNotification("com.dispenser", "d", at, " ", ""), Berlin))
         assertEquals(2, dispenserDao.events.size)
+    }
+
+    @Test
+    fun onlyIDispenserTicksAndOnlyItsNewestLineCounts() = runTest {
+        val routineDao = FakeRoutineDao(listOf(morning))
+        val repo = DispenserRepository(FakeDispenserDao(), RoutineRepository(routineDao) {}) {}
+        val at = millis("2026-10-26T08:07")
+        // Smart Life: gespeichert, aber nicht abgehakt.
+        val viaSmartLife = repo.onNotification(DispenserNotification("com.tuya.smartlife", "a", at, "Memio Go", "Medikament genommen"), Berlin)
+        assertEquals(DispenserEventKind.TAKEN, viaSmartLife!!.kind)
+        assertNull(viaSmartLife.matchedMinutes)
+        assertEquals("Genommen → nicht abgehakt – das tut nur iDispenser selbst", dispenserEventSummary(viaSmartLife, monday))
+        // Sammel-Benachrichtigung: Die alte Zeile „genommen“ gilt nicht für die neue Meldung.
+        val inbox = DispenserNotification(
+            "com.dispenser", "b", at, "iDispenser", "Gestern 20:00 genommen\nZeit für deine Medikamente",
+            latestLine = "Zeit für deine Medikamente",
+        )
+        assertEquals(DispenserEventKind.DUE, repo.onNotification(inbox, Berlin)!!.kind)
+        assertTrue(routineDao.logEntries.isEmpty())
     }
 }
 
@@ -221,8 +303,8 @@ private class FakeRoutineDao(routines: List<RoutineEntity>) : RoutineDao {
 private class FakeDispenserDao : DispenserDao {
     val events = mutableListOf<DispenserEventEntity>()
 
-    override fun observeRecent(limit: Int): Flow<List<DispenserEventEntity>> =
-        MutableStateFlow(events.sortedByDescending { it.postedAt }.take(limit))
+    override fun observeRecent(after: Long, limit: Int): Flow<List<DispenserEventEntity>> =
+        MutableStateFlow(events.filter { it.postedAt > after }.sortedByDescending { it.postedAt }.take(limit))
     override suspend fun insert(event: DispenserEventEntity): Long {
         if (events.any { it.notificationKey == event.notificationKey && it.postedAt == event.postedAt }) return -1L
         events += event.copy(id = events.size + 1L)
@@ -231,5 +313,4 @@ private class FakeDispenserDao : DispenserDao {
     override suspend fun purge(before: Long) {
         events.removeAll { it.postedAt < before }
     }
-    override suspend fun clear() = events.clear()
 }

@@ -16,7 +16,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,13 +28,13 @@ import de.lltntplanet.adhsapp.data.db.DispenserEventKind
 import de.lltntplanet.adhsapp.data.db.RoutineEntity
 import de.lltntplanet.adhsapp.data.db.RoutineKind
 import de.lltntplanet.adhsapp.data.dispenser.DispenserListener
+import de.lltntplanet.adhsapp.data.dispenser.DispenserLogic
 import de.lltntplanet.adhsapp.data.routines.RoutineLogic
 import de.lltntplanet.adhsapp.data.settings.AppSettings
 import de.lltntplanet.adhsapp.ui.components.appContainer
 import de.lltntplanet.adhsapp.util.Dates
 import de.lltntplanet.adhsapp.util.Permissions
 import de.lltntplanet.adhsapp.util.TimeFormat
-import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 /** Wahl für die eigene Erinnerung bei Medikamenten im Spender: Minuten nach der Einnahmezeit, -1 = keine. */
@@ -53,6 +52,7 @@ internal fun dispenserEventSummary(e: DispenserEventEntity, today: LocalDate = L
     val minutes = e.matchedMinutes
     val match = when {
         e.kind != DispenserEventKind.TAKEN -> null
+        !DispenserLogic.isDedicatedApp(e.packageName) -> "nicht abgehakt – das tut nur iDispenser selbst"
         minutes == null || e.matchedNames.isBlank() -> "kein passendes Medikament im Spender"
         else -> {
             val day = e.matchedEpochDay?.let { LocalDate.ofEpochDay(it) }
@@ -69,9 +69,9 @@ internal fun dispenserEventSummary(e: DispenserEventEntity, today: LocalDate = L
 fun DispenserSettingsSection(s: AppSettings, update: ((AppSettings) -> AppSettings) -> Unit) {
     val container = appContainer()
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val routines by remember { container.routines.observeAll() }.collectAsStateWithLifecycle(initialValue = emptyList<RoutineEntity>())
-    val events by remember { container.dispenser.observeRecent(10) }.collectAsStateWithLifecycle(initialValue = emptyList())
+    val events by remember(s.dispenserClearedAt) { container.dispenser.observeRecent(10, after = s.dispenserClearedAt) }
+        .collectAsStateWithLifecycle(initialValue = emptyList())
     var enabled by remember { mutableStateOf(DispenserListener.isEnabled(context)) }
     var installed by remember { mutableStateOf(DispenserListener.isDispenserAppInstalled(context)) }
     LifecycleResumeEffect(Unit) {
@@ -178,6 +178,7 @@ fun DispenserSettingsSection(s: AppSettings, update: ((AppSettings) -> AppSettin
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        TextButton(onClick = { scope.launch { container.dispenser.clear() } }) { Text("Liste leeren") }
+        // Nur ausblenden: Die Einträge bleiben für die Erkennung doppelter Meldungen gespeichert (90 Tage).
+        TextButton(onClick = { update { it.copy(dispenserClearedAt = System.currentTimeMillis()) } }) { Text("Liste leeren") }
     }
 }

@@ -66,12 +66,14 @@ import androidx.lifecycle.lifecycleScope
 import de.lltntplanet.adhsapp.AdhsApp
 import de.lltntplanet.adhsapp.MainActivity
 import de.lltntplanet.adhsapp.data.google.GoogleJson
+import de.lltntplanet.adhsapp.data.routines.RoutineLogic
 import de.lltntplanet.adhsapp.ui.theme.AdhsTheme
 import de.lltntplanet.adhsapp.ui.theme.AppColors
 import de.lltntplanet.adhsapp.util.TimeFormat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
+import java.time.LocalDate
 
 /**
  * Die Vollbild-Erinnerung. Erscheint auch auf dem Sperrbildschirm und schaltet das Display ein.
@@ -108,6 +110,18 @@ class ReminderActivity : ComponentActivity() {
                         onOpen = { open(current) },
                     )
                 }
+            }
+        }
+        closeWhenDoneElsewhere()
+    }
+
+    /** Hakt der Medikamentenspender (oder die App an anderer Stelle) eine Einnahme ab, verschwindet ihre Erinnerung. */
+    private fun closeWhenDoneElsewhere() {
+        val today = LocalDate.now()
+        lifecycleScope.launch {
+            container.routines.observeLog(today.minusDays(1), today.plusDays(1)).collect { log ->
+                val done = RoutineLogic.doneKeys(log)
+                reminders.filter { it.kind.isRoutine && (it.originKey ?: it.key) in done }.forEach(::handled)
             }
         }
     }

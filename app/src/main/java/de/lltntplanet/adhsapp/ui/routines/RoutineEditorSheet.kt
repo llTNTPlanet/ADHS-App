@@ -57,6 +57,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -65,12 +66,14 @@ import androidx.compose.ui.unit.dp
 import de.lltntplanet.adhsapp.data.db.RoutineEntity
 import de.lltntplanet.adhsapp.data.db.RoutineKind
 import de.lltntplanet.adhsapp.data.db.SymptomEntity
+import de.lltntplanet.adhsapp.data.dispenser.DispenserListener
 import de.lltntplanet.adhsapp.data.routines.Medication
 import de.lltntplanet.adhsapp.data.routines.RoutineLogic
 import de.lltntplanet.adhsapp.data.routines.RoutineOccurrence
 import de.lltntplanet.adhsapp.ui.components.DatePickDialog
 import de.lltntplanet.adhsapp.ui.components.TimePickDialog
 import de.lltntplanet.adhsapp.ui.settings.SwitchSetting
+import de.lltntplanet.adhsapp.util.Permissions
 import de.lltntplanet.adhsapp.util.TimeFormat
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -110,6 +113,7 @@ fun RoutineEditorSheet(
     var dose by remember { mutableStateOf(routine?.dose.orEmpty()) }
     /** Liegt im Medikamentenspender (Memio Go) – wird dann automatisch abgehakt. */
     var dispenser by remember { mutableStateOf(routine?.dispenser ?: false) }
+    val context = LocalContext.current
     val times = remember { (routine?.let { RoutineLogic.times(it) } ?: listOf(8 * 60)).toMutableStateList() }
     var weekdays by remember { mutableIntStateOf(routine?.weekdays ?: RoutineEntity.ALL_DAYS) }
     val zone = remember { ZoneId.systemDefault() }
@@ -247,6 +251,15 @@ fun RoutineEditorSheet(
                         "Die Uhrzeiten müssen zu den Alarmen am Spender passen.",
                     dispenser,
                 ) { dispenser = it }
+                if (dispenser && !DispenserListener.isEnabled(context)) {
+                    Text(
+                        "Dafür muss die App die Benachrichtigungen von iDispenser mitlesen dürfen – bis dahin erinnert " +
+                            "sie wie bei jedem anderen Medikament.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    TextButton(onClick = { Permissions.open(context, DispenserListener.settingsIntent(context)) }) { Text("Erlauben") }
+                }
             }
 
             Spacer(Modifier.height(16.dp))
