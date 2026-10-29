@@ -64,6 +64,9 @@ class DispenserListener : NotificationListenerService() {
                 Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
             }
 
+        /** Kann die App den Spender mitlesen? Nur Meldungen von iDispenser haken ab – ohne die App kommt nichts. */
+        fun isWatching(context: Context): Boolean = isEnabled(context) && isDispenserAppInstalled(context)
+
         /** Ist die App iDispenser installiert? */
         fun isDispenserAppInstalled(context: Context): Boolean =
             runCatching { context.packageManager.getPackageInfo(DispenserLogic.IDISPENSER_PACKAGE, 0) }.isSuccess

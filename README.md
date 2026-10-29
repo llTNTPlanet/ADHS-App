@@ -75,7 +75,8 @@ Weitere Bilder: [Einrichtung](docs/screenshots/01-einrichtung.png), [Essen](docs
   Meldungen von iDispenser selbst. Eine schon angezeigte Erinnerung zu dieser Einnahme verschwindet dann.
 - Der Spender klingelt selbst – die eigene Erinnerung der App kommt für Spender-Medikamente deshalb erst später als
   Rückfall (gleichzeitig, 15/30/60 Min. später oder gar nicht; Standard 30 Min.) und entfällt, wenn der Spender vorher
-  „genommen“ meldet. Ist der Benachrichtigungszugriff nicht erlaubt, erinnert die App wie bei jedem anderen Medikament.
+  „genommen“ meldet. Ist der Benachrichtigungszugriff nicht erlaubt oder iDispenser nicht installiert, erinnert die App
+  wie bei jedem anderen Medikament.
 - Die Einstellungen zeigen die zuletzt mitgelesenen Meldungen mit ihrer Einordnung (genommen, verpasst, fällig,
   nachfüllen, unbekannt), damit sich die Erkennung an die echten Texte anpassen lässt. Am Spender selbst ändert sich
   nichts; Alarme werden weiter in iDispenser oder am Gerät eingestellt.
@@ -265,9 +266,10 @@ Handy. „Liste leeren“ blendet die Meldungen nur aus.
   Berechtigung `WRITE_NUTRITION`, Erklärungs-Activity für den Berechtigungsdialog
 - Medikamentenspender: `NotificationListenerService` (`DispenserListener`) für die Pakete `com.dispenser`
   (iDispenser, Tuya-Hersteller-App) sowie `com.tuya.smartlife`/`com.tuya.smart`; Einordnung per Stichwörtern als
-  ganze Wörter (Deutsch/Englisch, Verneinung und Fragen ausgenommen, bei Sammel-Benachrichtigungen nur die neueste
-  Zeile) und Zuordnung zur letzten Einnahmezeit davor (5 Min. Toleranz, höchstens 12 Std. zurück; nennt der Text genau
-  eine noch offene Einnahmezeit, hat sie Vorrang, Zeiten nach „nächste“/„next“ zählen nicht) in `DispenserLogic`; Room-Tabelle `dispenser_events`, `routines.dispenser`,
+  ganze Wörter (Deutsch/Englisch; satzweise, Sätze mit Verneinung, Frage, Aufforderung oder Bedingung zählen nicht,
+  bei Sammel-Benachrichtigungen nur die neueste Zeile) und Zuordnung zur letzten Einnahmezeit davor (5 Min. Toleranz,
+  höchstens 12 Std. zurück; nennt der Text genau eine Einnahmezeit, gilt sie – ist sie schon abgehakt, wird nichts
+  abgehakt; Zeiten nach „nächste“/„next“ zählen nicht) in `DispenserLogic`; Room-Tabelle `dispenser_events`, `routines.dispenser`,
   `routine_log.byDispenser` (DB-Version 6)
 - Erinnerungen: genau ein exakter Alarm auf die jeweils nächste Erinnerung (`AlarmManager`), Benachrichtigung mit
   Full-Screen-Intent, Vollbild-Activity über dem Sperrbildschirm; Neuplanung nach Neustart, Zeitänderung,

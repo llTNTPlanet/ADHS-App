@@ -50,13 +50,23 @@ object DispenserLogic {
     private val MISSED = words("verpass*", "versäumt", "vergessen", "missed", "forgot*")
     private val REFILL = words("nachfüll*", "auffüll*", "neu befüll*", "fast leer", "refill*", "reload*", "running low")
     private val TAKEN = words("genommen", "eingenommen", "entnommen", "taken", "took")
-    private val NEGATION = Regex("""(?<!\p{L})(?:nicht|kein|keine|not|never)(?!\p{L})|n['’]t(?!\p{L})""")
-
-    /** Fragen und Aufforderungen („Hast du … genommen?“, „sollte … eingenommen werden“) sind keine Einnahme. */
-    private val REQUEST = words(
-        "soll*", "muss", "musst", "müssen", "bitte", "werden", "hast du", "haben sie",
-        "should", "must", "need*", "to be taken", "have you", "did you", "please",
+    private val NEGATION = Regex(
+        """(?<!\p{L})(?:nicht\p{L}*|kein\p{L}*|ohne|no|none|nothing|not|never|""" +
+            """(?:was|were|has|have|had|did|does|do|is|are)nt)(?!\p{L})|n['’´`]t(?!\p{L})""",
     )
+
+    /**
+     * Fragen, Aufforderungen, Bedingungen und Rückblicke („Hast du … genommen?“, „sollte … eingenommen werden“,
+     * „Falls bereits eingenommen, ignorieren“, „Zuletzt genommen um 08:00“) melden keine Einnahme.
+     */
+    private val REQUEST = words(
+        "soll*", "muss", "musst", "müssen", "bitte", "werden", "hast du", "haben sie", "falls", "wenn", "ignorier*",
+        "zuletzt", "letzte*", "should", "must", "need*", "to be taken", "have you", "did you", "please", "if",
+        "ignore*", "last",
+    )
+
+    /** Satzweise prüfen: Ein „Bitte Fach schließen“ hinter „Medikament entnommen.“ ändert nichts an der Einnahme. */
+    private val SENTENCE = Regex("""[^.!?;\n–—]+[.!?;\n–—]*""")
     private val DUE = words(
         "zeit für", "einnahmezeit*", "fällig*", "bereit*", "bitte nehmen", "bitte einnehmen", "erinnerung*",
         "time to take", "time for", "it's time", "ready", "please take", "reminder*",
@@ -85,18 +95,17 @@ object DispenserLogic {
 
     /**
      * Welche Art Meldung ist das? Unbekanntes bleibt [DispenserEventKind.OTHER] – lieber nichts abhaken als falsch.
-     * „Genommen“ zählt nur ohne Verneinung und nicht in Fragen oder Aufforderungen.
+     * „Genommen“ zählt nur in einem Satz ohne Verneinung, Frage, Aufforderung oder Bedingung.
      */
     fun classify(title: String, text: String): DispenserEventKind {
         val t = normalize("$title $text")
-        val taken = TAKEN.containsMatchIn(t)
+        val takenSentences = sentences(title, text).filter { TAKEN.containsMatchIn(it) }
         return when {
-            taken && NEGATION.containsMatchIn(t) -> DispenserEventKind.MISSED
+            takenSentences.any { NEGATION.containsMatchIn(it) } -> DispenserEventKind.MISSED
+            takenSentences.any { '?' !in it && !REQUEST.containsMatchIn(it) } -> DispenserEventKind.TAKEN
             MISSED.containsMatchIn(t) -> DispenserEventKind.MISSED
             REFILL.containsMatchIn(t) -> DispenserEventKind.REFILL
-            taken && ('?' in t || REQUEST.containsMatchIn(t)) -> DispenserEventKind.DUE
-            taken -> DispenserEventKind.TAKEN
-            DUE.containsMatchIn(t) -> DispenserEventKind.DUE
+            takenSentences.isNotEmpty() || DUE.containsMatchIn(t) -> DispenserEventKind.DUE
             else -> DispenserEventKind.OTHER
         }
     }
@@ -119,8 +128,8 @@ object DispenserLogic {
     /**
      * Zu welcher Einnahme gehört eine Meldung „genommen“ um [postedAt]? Der Spender öffnet ein Fach erst zur
      * Einnahmezeit – also zählt die letzte Einnahmezeit davor (höchstens [LATE_LIMIT_MILLIS] zurück). Nennt die
-     * Meldung genau eine Uhrzeit ([textTimes]) und ist diese Einnahme noch offen, gilt sie. Nur Medikamente, die als
-     * „im Spender“ markiert sind.
+     * Meldung genau eine der Einnahmezeiten ([textTimes]), gilt diese – ist sie schon abgehakt, wird nichts abgehakt.
+     * Nur Medikamente, die als „im Spender“ markiert sind.
      */
     fun matchTaken(
         routines: List<RoutineEntity>,
@@ -135,8 +144,8 @@ object DispenserLogic {
         val candidates = RoutineLogic.occurrences(inDispenser, log, day.minusDays(1), day, zone)
             .filter { it.at <= postedAt + EARLY_TOLERANCE_MILLIS && it.at >= postedAt - LATE_LIMIT_MILLIS }
         if (candidates.isEmpty()) return null
-        val named = textTimes.singleOrNull()?.let { m -> candidates.filter { it.minutes == m } }.orEmpty()
-        val pool = named.takeIf { n -> n.any { !it.done && !it.skipped } } ?: candidates
+        val named = candidates.filter { it.minutes in textTimes }
+        val pool = if (named.map { it.minutes }.distinct().size == 1) named else candidates
         val slotAt = pool.maxOf { it.at }
         val slot = pool.filter { it.at == slotAt }
         return DispenserMatch(slot.first().date, slot.first().minutes, slot)
@@ -153,6 +162,9 @@ object DispenserLogic {
             if (w.endsWith("*")) Regex.escape(w.dropLast(1)) else Regex.escape(w) + "(?!\\p{L})"
         },
     )
+
+    private fun sentences(title: String, text: String): List<String> =
+        SENTENCE.findAll("$title\n$text".lowercase(Locale.GERMAN)).map { normalize(it.value) }.filter { it.isNotEmpty() }.toList()
 
     private fun normalize(s: String): String = s.lowercase(Locale.GERMAN).replace(Regex("\\s+"), " ").trim()
 }

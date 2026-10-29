@@ -51,12 +51,17 @@ class RoutineRepository(
     }
 
     /**
-     * Aus einer Erinnerung heraus abhaken: der Zeitpunkt steckt in [atMillis]. Ein schon vorhandener Eintrag
-     * (z. B. vom Medikamentenspender) bleibt stehen.
+     * Aus einer Erinnerung heraus abhaken: der Zeitpunkt steckt in [atMillis]. Ein schon vorhandener Haken (z. B. vom
+     * Medikamentenspender) bleibt stehen, „Übersprungen“ wird zu „genommen“.
      */
     suspend fun setDoneAt(routineId: Long, atMillis: Long, zone: ZoneId = ZoneId.systemDefault()) {
         val z = Dates.toZoned(atMillis, zone)
-        dao.insertLogIfAbsent(RoutineLogEntity(routineId = routineId, epochDay = z.toLocalDate().toEpochDay(), minutes = z.hour * 60 + z.minute))
+        val day = z.toLocalDate().toEpochDay()
+        val minutes = z.hour * 60 + z.minute
+        val existing = dao.log(day, day).find { it.routineId == routineId && it.minutes == minutes }
+        if (existing == null || existing.skipped) {
+            dao.insertLog(RoutineLogEntity(routineId = routineId, epochDay = day, minutes = minutes))
+        }
         onChanged()
     }
 

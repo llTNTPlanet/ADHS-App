@@ -63,6 +63,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import de.lltntplanet.adhsapp.data.db.RoutineEntity
 import de.lltntplanet.adhsapp.data.db.RoutineKind
 import de.lltntplanet.adhsapp.data.db.SymptomEntity
@@ -114,6 +115,14 @@ fun RoutineEditorSheet(
     /** Liegt im Medikamentenspender (Memio Go) – wird dann automatisch abgehakt. */
     var dispenser by remember { mutableStateOf(routine?.dispenser ?: false) }
     val context = LocalContext.current
+    var listenerEnabled by remember { mutableStateOf(DispenserListener.isEnabled(context)) }
+    var dispenserAppInstalled by remember { mutableStateOf(DispenserListener.isDispenserAppInstalled(context)) }
+    // Nach „Erlauben“ kommt man aus den Systemeinstellungen zurück: dann neu prüfen.
+    LifecycleResumeEffect(Unit) {
+        listenerEnabled = DispenserListener.isEnabled(context)
+        dispenserAppInstalled = DispenserListener.isDispenserAppInstalled(context)
+        onPauseOrDispose { }
+    }
     val times = remember { (routine?.let { RoutineLogic.times(it) } ?: listOf(8 * 60)).toMutableStateList() }
     var weekdays by remember { mutableIntStateOf(routine?.weekdays ?: RoutineEntity.ALL_DAYS) }
     val zone = remember { ZoneId.systemDefault() }
@@ -251,7 +260,7 @@ fun RoutineEditorSheet(
                         "Die Uhrzeiten müssen zu den Alarmen am Spender passen.",
                     dispenser,
                 ) { dispenser = it }
-                if (dispenser && !DispenserListener.isEnabled(context)) {
+                if (dispenser && !listenerEnabled) {
                     Text(
                         "Dafür muss die App die Benachrichtigungen von iDispenser mitlesen dürfen – bis dahin erinnert " +
                             "sie wie bei jedem anderen Medikament.",
@@ -259,6 +268,13 @@ fun RoutineEditorSheet(
                         color = MaterialTheme.colorScheme.error,
                     )
                     TextButton(onClick = { Permissions.open(context, DispenserListener.settingsIntent(context)) }) { Text("Erlauben") }
+                } else if (dispenser && !dispenserAppInstalled) {
+                    Text(
+                        "Die App iDispenser ist nicht installiert – ohne sie kommen keine Meldungen vom Spender, und die App " +
+                            "erinnert wie bei jedem anderen Medikament.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
             }
 
