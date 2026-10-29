@@ -392,6 +392,9 @@ fun SettingsScreen(onBack: () -> Unit, onOpenSetup: () -> Unit) {
                 s.alarmClockMode,
             ) { v -> vm.update { it.copy(alarmClockMode = v) } }
 
+            // Medikamentenspender (Memio Go)
+            DispenserSettingsSection(s, vm::update)
+
             // Gesundheit
             Section("Gesundheit")
             GoogleRow(

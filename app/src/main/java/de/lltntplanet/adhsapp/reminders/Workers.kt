@@ -29,6 +29,7 @@ class MaintenanceWorker(context: Context, params: WorkerParameters) : CoroutineW
         }
         c.tasks.purgeOldDone(30L * 24 * 60 * 60 * 1000)
         c.routines.purgeOldLog(90)
+        c.dispenser.purgeOld(90)
         return Result.success()
     }
 

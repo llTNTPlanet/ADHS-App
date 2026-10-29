@@ -160,6 +160,11 @@ class ReminderNotifier(private val context: Context) {
         NotificationManagerCompat.from(context).cancel(reminder.notificationId)
     }
 
+    /** Benachrichtigung zu einem Erinnerungs-Schlüssel entfernen (z. B. „rt:…“, wenn der Spender die Einnahme meldet). */
+    fun cancelKey(key: String) {
+        NotificationManagerCompat.from(context).cancel(key.hashCode())
+    }
+
     private fun activityIntent(reminders: List<Reminder>, requestCode: Int): PendingIntent =
         PendingIntent.getActivity(
             context,

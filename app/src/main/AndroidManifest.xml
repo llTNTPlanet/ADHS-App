@@ -14,6 +14,8 @@
 
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
+        <!-- App iDispenser des Medikamentenspenders Memio Go (Hinweis, falls nicht installiert) -->
+        <package android:name="com.dispenser" />
     </queries>
 
     <!-- Google Kalender (über den Kalender-Speicher des Geräts) -->
@@ -120,6 +122,17 @@
         <receiver
             android:name=".update.UpdateInstallReceiver"
             android:exported="false" />
+
+        <!-- Liest die Benachrichtigungen von iDispenser (Memio Go) mit, um Einnahmen automatisch abzuhaken -->
+        <service
+            android:name=".data.dispenser.DispenserListener"
+            android:exported="true"
+            android:label="@string/dispenser_listener_label"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
 
         <receiver
             android:name=".reminders.SystemEventsReceiver"

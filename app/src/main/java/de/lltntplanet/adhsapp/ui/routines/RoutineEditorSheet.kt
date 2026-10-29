@@ -70,6 +70,7 @@ import de.lltntplanet.adhsapp.data.routines.RoutineLogic
 import de.lltntplanet.adhsapp.data.routines.RoutineOccurrence
 import de.lltntplanet.adhsapp.ui.components.DatePickDialog
 import de.lltntplanet.adhsapp.ui.components.TimePickDialog
+import de.lltntplanet.adhsapp.ui.settings.SwitchSetting
 import de.lltntplanet.adhsapp.util.TimeFormat
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -107,6 +108,8 @@ fun RoutineEditorSheet(
     var picked by remember { mutableStateOf<Medication?>(null) }
     var kind by remember { mutableStateOf(routine?.kind ?: initialKind) }
     var dose by remember { mutableStateOf(routine?.dose.orEmpty()) }
+    /** Liegt im Medikamentenspender (Memio Go) – wird dann automatisch abgehakt. */
+    var dispenser by remember { mutableStateOf(routine?.dispenser ?: false) }
     val times = remember { (routine?.let { RoutineLogic.times(it) } ?: listOf(8 * 60)).toMutableStateList() }
     var weekdays by remember { mutableIntStateOf(routine?.weekdays ?: RoutineEntity.ALL_DAYS) }
     val zone = remember { ZoneId.systemDefault() }
@@ -236,6 +239,15 @@ fun RoutineEditorSheet(
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 modifier = Modifier.fillMaxWidth(),
             )
+            if (kind == RoutineKind.MEDICATION) {
+                Spacer(Modifier.height(4.dp))
+                SwitchSetting(
+                    "Im Medikamentenspender",
+                    "Memio Go: Meldet iDispenser „genommen“, wird die Einnahme automatisch abgehakt. " +
+                        "Die Uhrzeiten müssen zu den Alarmen am Spender passen.",
+                    dispenser,
+                ) { dispenser = it }
+            }
 
             Spacer(Modifier.height(16.dp))
             Text("Wiederholung", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
@@ -364,6 +376,7 @@ fun RoutineEditorSheet(
                                 times = RoutineLogic.encodeTimes(times),
                                 weekdays = weekdays,
                                 onceEpochDay = if (once) onceDay?.toEpochDay() else null,
+                                dispenser = kind == RoutineKind.MEDICATION && dispenser,
                             ),
                         )
                     },

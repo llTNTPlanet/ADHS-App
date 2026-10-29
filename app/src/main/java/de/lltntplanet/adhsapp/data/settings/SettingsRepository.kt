@@ -45,6 +45,11 @@ data class AppSettings(
      * Erinnerungen aus Google Kalender, damit vor dem Essen genau zu diesen Zeiten erinnert wird. Leer = keine.
      */
     val mealOffsets: Set<Int> = setOf(30, 10),
+    /**
+     * Medikamente im Spender (Memio Go): Die eigene Erinnerung kommt erst so viele Minuten nach der Einnahmezeit –
+     * nur falls der Spender bis dahin keine Entnahme gemeldet hat. 0 = gleichzeitig, -1 = keine eigene Erinnerung.
+     */
+    val dispenserReminderDelay: Int = 30,
     val allDayReminders: Boolean = true,
     val allDayReminderMinutes: Int = 8 * 60,
     val birthdayReminders: Boolean = true,
@@ -112,6 +117,7 @@ class SettingsRepository(private val context: Context) {
         val mealReminderMinutesAfter = intPreferencesKey("meal_reminder_minutes_after")
         val mealOffsets = stringSetPreferencesKey("meal_offsets")
         val mealEventTitles = stringSetPreferencesKey("meal_event_titles")
+        val dispenserReminderDelay = intPreferencesKey("dispenser_reminder_delay")
         val allDayReminders = booleanPreferencesKey("all_day_reminders")
         val allDayReminderMinutes = intPreferencesKey("all_day_reminder_minutes")
         val birthdayReminders = booleanPreferencesKey("birthday_reminders")
@@ -167,6 +173,7 @@ class SettingsRepository(private val context: Context) {
             mealReminderMinutesAfter = this[Keys.mealReminderMinutesAfter] ?: d.mealReminderMinutesAfter,
             mealEventTitles = this[Keys.mealEventTitles] ?: d.mealEventTitles,
             mealOffsets = this[Keys.mealOffsets]?.mapNotNull { it.toIntOrNull() }?.toSet() ?: d.mealOffsets,
+            dispenserReminderDelay = this[Keys.dispenserReminderDelay] ?: d.dispenserReminderDelay,
             allDayReminders = this[Keys.allDayReminders] ?: d.allDayReminders,
             allDayReminderMinutes = this[Keys.allDayReminderMinutes] ?: d.allDayReminderMinutes,
             birthdayReminders = this[Keys.birthdayReminders] ?: d.birthdayReminders,
@@ -227,6 +234,7 @@ class SettingsRepository(private val context: Context) {
         this[Keys.mealReminderMinutesAfter] = s.mealReminderMinutesAfter
         this[Keys.mealEventTitles] = s.mealEventTitles
         this[Keys.mealOffsets] = s.mealOffsets.map { it.toString() }.toSet()
+        this[Keys.dispenserReminderDelay] = s.dispenserReminderDelay
         this[Keys.allDayReminders] = s.allDayReminders
         this[Keys.allDayReminderMinutes] = s.allDayReminderMinutes
         this[Keys.birthdayReminders] = s.birthdayReminders

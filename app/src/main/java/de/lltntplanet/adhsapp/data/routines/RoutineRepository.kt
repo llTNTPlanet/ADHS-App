@@ -56,5 +56,19 @@ class RoutineRepository(
         setDone(routineId, z.toLocalDate(), z.hour * 60 + z.minute, true)
     }
 
+    /**
+     * Vom Medikamentenspender gemeldet: abhaken, aber nur, wenn die Einnahme noch offen ist – ein Haken oder
+     * „Übersprungen“ von Hand bleibt stehen. true, wenn neu abgehakt.
+     */
+    suspend fun setDoneByDispenser(routineId: Long, date: LocalDate, minutes: Int, at: Long): Boolean {
+        val id = dao.insertLogIfAbsent(
+            RoutineLogEntity(routineId = routineId, epochDay = date.toEpochDay(), minutes = minutes, doneAt = at, byDispenser = true),
+        )
+        return id != -1L
+    }
+
+    /** Neu planen lassen, z. B. nachdem der Spender mehrere Einnahmen abgehakt hat. */
+    fun notifyChanged() = onChanged()
+
     suspend fun purgeOldLog(days: Long) = dao.purgeLog(LocalDate.now().minusDays(days).toEpochDay())
 }

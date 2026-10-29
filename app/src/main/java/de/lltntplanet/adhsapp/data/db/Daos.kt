@@ -132,6 +132,10 @@ interface RoutineDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLog(entry: RoutineLogEntity): Long
 
+    /** Nur eintragen, wenn die Einnahme noch nicht abgehakt oder übersprungen ist (sonst -1). */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertLogIfAbsent(entry: RoutineLogEntity): Long
+
     @Query("DELETE FROM routine_log WHERE routineId = :routineId AND epochDay = :epochDay AND minutes = :minutes")
     suspend fun deleteLog(routineId: Long, epochDay: Long, minutes: Int)
 
@@ -186,4 +190,20 @@ interface MoodDao {
 
     @Query("DELETE FROM mood_entries WHERE epochDay = :epochDay AND minutes = :minutes")
     suspend fun deleteCheckup(epochDay: Long, minutes: Int)
+}
+
+@Dao
+interface DispenserDao {
+    @Query("SELECT * FROM dispenser_events ORDER BY postedAt DESC LIMIT :limit")
+    fun observeRecent(limit: Int): Flow<List<DispenserEventEntity>>
+
+    /** -1, wenn dieselbe Benachrichtigung schon gespeichert ist. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(event: DispenserEventEntity): Long
+
+    @Query("DELETE FROM dispenser_events WHERE postedAt < :before")
+    suspend fun purge(before: Long)
+
+    @Query("DELETE FROM dispenser_events")
+    suspend fun clear()
 }

@@ -17,6 +17,8 @@ data class RoutineOccurrence(
     val at: Long,
     val done: Boolean = false,
     val skipped: Boolean = false,
+    /** Vom Medikamentenspender als genommen gemeldet (automatisch abgehakt). */
+    val byDispenser: Boolean = false,
 ) {
     val key: String get() = "rt:${routine.id}:${date.toEpochDay()}:$minutes"
     val epochDay: Long get() = date.toEpochDay()
@@ -161,6 +163,7 @@ object RoutineLogic {
                         at = Dates.atMinutes(date, m, zone),
                         done = entry != null && !entry.skipped,
                         skipped = entry?.skipped == true,
+                        byDispenser = entry?.byDispenser == true,
                     )
                 }
             }
