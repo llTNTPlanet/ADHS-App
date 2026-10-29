@@ -10,15 +10,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material.icons.filled.Mood
 import androidx.compose.material.icons.filled.Insights
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,6 +42,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -142,6 +148,11 @@ class RoutinesViewModel(private val c: AppContainer) : ViewModel() {
         viewModelScope.launch { c.routines.delete(routine) }
     }
 
+    /** Vergangene einmalige Einträge aufräumen (Checkup-Werte bleiben in der Statistik). */
+    fun deleteAll(routines: List<RoutineEntity>) {
+        viewModelScope.launch { routines.forEach { c.routines.delete(it) } }
+    }
+
     fun setActive(routine: RoutineEntity, active: Boolean) {
         viewModelScope.launch { c.routines.save(routine.copy(active = active)) }
     }
@@ -167,11 +178,22 @@ fun RoutinesScreen(modifier: Modifier = Modifier, onOpenSettings: () -> Unit = {
     val checkupRequest by vm.checkupRequest.collectAsStateWithLifecycle()
     var editing by remember { mutableStateOf<RoutineEntity?>(null) }
     var creating by remember { mutableStateOf<RoutineKind?>(null) }
+    /** Neuer Eintrag direkt als „Einmalig“ (Knopf bei „Einmalige Erinnerungen“). */
+    var creatingOnce by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<RoutineOccurrence?>(null) }
     var checkup by remember { mutableStateOf<RoutineOccurrence?>(null) }
+    var showPast by rememberSaveable { mutableStateOf(false) }
+    var confirmDeletePast by remember { mutableStateOf(false) }
     val zone = remember { ZoneId.systemDefault() }
     val today = Dates.toLocalDate(now, zone)
     val hasCheckup = routines.orEmpty().any { it.kind == RoutineKind.CHECKUP }
+    val regular = routines.orEmpty().filter { !it.isOnce }
+    val onceUpcoming = routines.orEmpty()
+        .filter { it.isOnce && !RoutineLogic.isPastOnce(it, today) }
+        .sortedWith(compareBy({ it.onceEpochDay }, { RoutineLogic.times(it).firstOrNull() }, { it.name }))
+    val oncePast = routines.orEmpty()
+        .filter { RoutineLogic.isPastOnce(it, today) }
+        .sortedWith(compareByDescending<RoutineEntity> { it.onceEpochDay }.thenBy { it.name })
 
     /** Checkup-Vorkommen: Abhaken heißt ausfüllen – das Blatt mit den Schiebereglern öffnen. */
     fun openOccurrence(o: RoutineOccurrence, toggle: Boolean) {
@@ -208,7 +230,7 @@ fun RoutinesScreen(modifier: Modifier = Modifier, onOpenSettings: () -> Unit = {
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { creating = RoutineKind.MEDICATION }, modifier = Modifier.testTag("routine-add")) {
+            FloatingActionButton(onClick = { creatingOnce = false; creating = RoutineKind.MEDICATION }, modifier = Modifier.testTag("routine-add")) {
                 Icon(Icons.Filled.Add, "Routine oder Medikament hinzufügen")
             }
         },
@@ -223,9 +245,10 @@ fun RoutinesScreen(modifier: Modifier = Modifier, onOpenSettings: () -> Unit = {
                         icon = Icons.Filled.Medication,
                         title = "Noch nichts eingetragen",
                         text = "Lege Medikamente oder feste Routinen mit Uhrzeiten an – die App erinnert dich pünktlich " +
-                            "im Vollbild, und du hakst jede Einnahme ab wie in MyTherapy.",
+                            "im Vollbild, und du hakst jede Einnahme ab wie in MyTherapy. Etwas nur ein einziges Mal? " +
+                            "Dann beim Anlegen „Einmalig“ wählen und ein Datum setzen.",
                         buttonText = "Erstes Medikament anlegen",
-                        onClick = { creating = RoutineKind.MEDICATION },
+                        onClick = { creatingOnce = false; creating = RoutineKind.MEDICATION },
                         modifier = Modifier.padding(top = 12.dp),
                     )
                 }
@@ -250,24 +273,100 @@ fun RoutinesScreen(modifier: Modifier = Modifier, onOpenSettings: () -> Unit = {
                         text = "Lass dich regelmäßig fragen, wie es dir geht: Müdigkeit, Unruhe, Stimmung … jeweils auf einer Skala von 1 bis 10. " +
                             "Die Werte sammelt die App im Hintergrund für deine Statistik.",
                         buttonText = "Checkup einrichten",
-                        onClick = { creating = RoutineKind.CHECKUP },
+                        onClick = { creatingOnce = false; creating = RoutineKind.CHECKUP },
                         modifier = Modifier.padding(top = 12.dp),
                     )
                 }
             }
 
-            item { SectionTitle("Meine Routinen & Medikamente") }
+            if (regular.isNotEmpty() || routines?.isEmpty() == true) item { SectionTitle("Meine Routinen & Medikamente") }
             if (routines != null && routines!!.isEmpty()) item { EmptyHint("Tippe auf +, um etwas anzulegen.") }
-            items(routines.orEmpty(), key = { "r${it.id}" }) { r ->
-                RoutineCard(r, onClick = { editing = r }, onActiveChange = { vm.setActive(r, it) })
+            items(regular, key = { "r${it.id}" }) { r ->
+                RoutineCard(r, today, onClick = { editing = r }, onActiveChange = { vm.setActive(r, it) })
+            }
+
+            if (routines != null) {
+                item {
+                    SectionTitle("Einmalige Erinnerungen", action = {
+                        TextButton(
+                            onClick = { creatingOnce = true; creating = RoutineKind.MEDICATION },
+                            modifier = Modifier.testTag("routine-add-once"),
+                        ) {
+                            Icon(Icons.Filled.Add, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Einmalig")
+                        }
+                    })
+                }
+                if (onceUpcoming.isEmpty() && routines!!.isNotEmpty()) {
+                    item {
+                        EmptyHint("Etwas nur ein einziges Mal – z. B. eine einzelne Tablette oder ein zusätzlicher Checkup? Tippe auf „Einmalig“.")
+                    }
+                }
+            }
+            items(onceUpcoming, key = { "r${it.id}" }) { r ->
+                RoutineCard(r, today, onClick = { editing = r }, onActiveChange = { vm.setActive(r, it) })
+            }
+
+            if (oncePast.isNotEmpty()) {
+                item(key = "past-header") {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { showPast = !showPast }
+                            .padding(top = 20.dp, bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "Vorbei (${oncePast.size})",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Icon(
+                            if (showPast) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                            contentDescription = if (showPast) "Vergangene einklappen" else "Vergangene anzeigen",
+                        )
+                    }
+                }
+                if (showPast) {
+                    items(oncePast, key = { "r${it.id}" }) { r ->
+                        RoutineCard(r, today, onClick = { editing = r }, onActiveChange = { vm.setActive(r, it) }, past = true)
+                    }
+                    item(key = "past-delete") {
+                        TextButton(
+                            onClick = { confirmDeletePast = true },
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("Alle vergangenen löschen") }
+                    }
+                }
             }
         }
+    }
+
+    if (confirmDeletePast) {
+        AlertDialog(
+            onDismissRequest = { confirmDeletePast = false },
+            title = { Text("Vergangene löschen?") },
+            text = {
+                val n = oncePast.size
+                Text(
+                    (if (n == 1) "Eine vergangene einmalige Erinnerung wird" else "$n vergangene einmalige Erinnerungen werden") +
+                        " samt Abhak-Einträgen entfernt." +
+                        if (oncePast.any { it.kind == RoutineKind.CHECKUP }) " Werte aus Checkups bleiben in der Statistik." else "",
+                )
+            },
+            confirmButton = { TextButton(onClick = { confirmDeletePast = false; vm.deleteAll(oncePast); showPast = false }) { Text("Löschen") } },
+            dismissButton = { TextButton(onClick = { confirmDeletePast = false }) { Text("Abbrechen") } },
+        )
     }
 
     creating?.let { kind ->
         RoutineEditorSheet(
             routine = null,
             initialKind = kind,
+            initialOnce = creatingOnce,
             onDismiss = { creating = null },
             onSave = { vm.save(it); creating = null },
             onDelete = null,
@@ -342,11 +441,18 @@ private fun TodayProgressCard(list: List<RoutineOccurrence>, now: Long) {
 }
 
 @Composable
-private fun RoutineCard(r: RoutineEntity, onClick: () -> Unit, onActiveChange: (Boolean) -> Unit) {
+private fun RoutineCard(
+    r: RoutineEntity,
+    today: LocalDate,
+    onClick: () -> Unit,
+    onActiveChange: (Boolean) -> Unit,
+    /** Vergangener einmaliger Eintrag: abgeblendet, ohne Pausieren-Schalter (es kommt ohnehin nichts mehr). */
+    past: Boolean = false,
+) {
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable(onClick = onClick).alpha(if (r.active) 1f else 0.6f),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable(onClick = onClick).alpha(if (r.active && !past) 1f else 0.6f),
     ) {
         Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(routineIcon(r.kind), null, tint = routineColor(r.kind))
@@ -355,13 +461,13 @@ private fun RoutineCard(r: RoutineEntity, onClick: () -> Unit, onActiveChange: (
                 Text(r.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 val times = RoutineLogic.times(r).joinToString(", ") { TimeFormat.minutesOfDay(it) }
                 Text(
-                    listOfNotNull(r.dose.ifBlank { null }, times, RoutineLogic.weekdaysText(r.weekdays), if (!r.active) "pausiert" else null)
+                    listOfNotNull(r.dose.ifBlank { null }, times, RoutineLogic.scheduleText(r, today), if (!r.active) "pausiert" else null)
                         .joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Switch(checked = r.active, onCheckedChange = onActiveChange)
+            if (!past) Switch(checked = r.active, onCheckedChange = onActiveChange)
         }
     }
 }

@@ -122,6 +122,13 @@ class ScreenshotTest {
         routines.insertLog(RoutineLogEntity(routineId = 3, epochDay = today.toEpochDay(), minutes = 470))
         // Gefühls-Checkup abends mit Werten der letzten zwei Wochen für die Statistik.
         routines.upsert(RoutineEntity(name = "Gefühls-Checkup", kind = RoutineKind.CHECKUP, times = "1200"))
+        // Einmalig: nur morgen früh, ohne Wiederholung.
+        routines.upsert(
+            RoutineEntity(
+                name = "Blutabnahme beim Hausarzt", kind = RoutineKind.ROUTINE, dose = "nüchtern", times = "450",
+                onceEpochDay = today.plusDays(1).toEpochDay(),
+            ),
+        )
         val moods = c.db.moodDao()
         moods.upsertSymptoms(MoodLogic.DEFAULT_SYMPTOMS.take(6).mapIndexed { i, n -> SymptomEntity(id = i + 1L, name = n, sortOrder = i) })
         val curve = listOf(7, 6, 7, 5, 6, 4, 5, 4, 3, 4, 3, 3, 2, 3)
@@ -237,6 +244,12 @@ class ScreenshotTest {
             clickTab("more")
             shot("14-weitere")
             runBlocking { app.container.settings.update { it.copy(barTabs = emptySet()) } }
+            // Einstellungen: eigene Vorwarnzeiten vor Essens-Terminen.
+            clickTab("today")
+            compose.onNode(androidx.compose.ui.test.hasContentDescription("Einstellungen")).performClick()
+            settle()
+            compose.onNode(hasText("statt der Vorwarnungen oben", substring = true)).performScrollTo()
+            shot("17-essens-vorwarnungen")
         }
     }
 

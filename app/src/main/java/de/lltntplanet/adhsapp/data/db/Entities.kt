@@ -105,8 +105,13 @@ data class RoutineEntity(
     val dose: String = "",
     /** Uhrzeiten in Minuten seit Mitternacht, aufsteigend, durch Komma getrennt (z. B. „480,840“). */
     val times: String,
-    /** Wochentage als Bitmaske: Bit 0 = Montag … Bit 6 = Sonntag; 127 = täglich. */
+    /** Wochentage als Bitmaske: Bit 0 = Montag … Bit 6 = Sonntag; 127 = täglich. Bei einmaligen Einträgen ohne Bedeutung. */
     val weekdays: Int = ALL_DAYS,
+    /**
+     * Einmaliges Ereignis: nur an diesem Tag (epochDay, LocalDate.toEpochDay) zu den Uhrzeiten, ohne Wiederholung.
+     * null = regelmäßig an den gewählten Wochentagen.
+     */
+    val onceEpochDay: Long? = null,
     /** Pausiert = keine Erinnerungen, bleibt aber in der Liste. */
     val active: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
@@ -114,6 +119,8 @@ data class RoutineEntity(
     companion object {
         const val ALL_DAYS = 0b1111111
     }
+
+    val isOnce: Boolean get() = onceEpochDay != null
 }
 
 /** Eine abgehakte (oder übersprungene) Einnahme / Routine zu einem Zeitpunkt. */

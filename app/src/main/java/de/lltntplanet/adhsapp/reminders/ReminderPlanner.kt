@@ -49,8 +49,14 @@ object ReminderPlanner {
                 ),
             )
         } else {
-            val fromCalendar = if (settings.useCalendarReminders) calendarReminders[e.eventId].orEmpty() else emptyList()
-            (settings.eventOffsets + fromCalendar)
+            // Essens-Termine bekommen genau ihre eigenen Vorwarnzeiten – ohne allgemeine Vorgabe und ohne Google-Kalender-Extras.
+            val offsets = if (isMealTitle(e.title, settings.mealEventTitles)) {
+                settings.mealOffsets
+            } else {
+                val fromCalendar = if (settings.useCalendarReminders) calendarReminders[e.eventId].orEmpty() else emptyList()
+                settings.eventOffsets + fromCalendar
+            }
+            offsets
                 .filter { it in 0..MAX_OFFSET_MINUTES }
                 .distinct()
                 .map { offset ->
@@ -71,8 +77,8 @@ object ReminderPlanner {
 
     /**
      * Essens-Termine (z. B. „Frühstück“): nach dem Ende eine stille Erinnerung, die Mahlzeit einzutragen.
-     * Unabhängig von den ignorierten Titeln – Essens-Termine lösen typischerweise keine Vorwarnung aus,
-     * sollen aber hinterher ans Eintragen erinnern.
+     * Unabhängig von den ignorierten Titeln – auch Essens-Termine ohne Vorwarnung sollen hinterher ans
+     * Eintragen erinnern. Die Vorwarnungen davor (eigene Zeiten aus mealOffsets) kommen aus [planEvents].
      */
     fun planMeals(
         events: List<EventInstance>,

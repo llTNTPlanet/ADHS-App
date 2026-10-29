@@ -40,6 +40,11 @@ data class AppSettings(
     val mealReminderMinutesAfter: Int = 0,
     /** Wörter, an denen ein Essens-Termin erkannt wird (im Titel enthalten, Groß-/Kleinschreibung egal). */
     val mealEventTitles: Set<String> = setOf("Frühstück", "Mittagessen", "Abendessen", "Essen"),
+    /**
+     * Vorwarnungen vor Essens-Terminen in Minuten (0 = zu Beginn). Gelten statt [eventOffsets] und ohne die
+     * Erinnerungen aus Google Kalender, damit vor dem Essen genau zu diesen Zeiten erinnert wird. Leer = keine.
+     */
+    val mealOffsets: Set<Int> = setOf(30, 10),
     val allDayReminders: Boolean = true,
     val allDayReminderMinutes: Int = 8 * 60,
     val birthdayReminders: Boolean = true,
@@ -105,6 +110,7 @@ class SettingsRepository(private val context: Context) {
         val useCalendarReminders = booleanPreferencesKey("use_calendar_reminders")
         val mealReminders = booleanPreferencesKey("meal_reminders")
         val mealReminderMinutesAfter = intPreferencesKey("meal_reminder_minutes_after")
+        val mealOffsets = stringSetPreferencesKey("meal_offsets")
         val mealEventTitles = stringSetPreferencesKey("meal_event_titles")
         val allDayReminders = booleanPreferencesKey("all_day_reminders")
         val allDayReminderMinutes = intPreferencesKey("all_day_reminder_minutes")
@@ -160,6 +166,7 @@ class SettingsRepository(private val context: Context) {
             mealReminders = this[Keys.mealReminders] ?: d.mealReminders,
             mealReminderMinutesAfter = this[Keys.mealReminderMinutesAfter] ?: d.mealReminderMinutesAfter,
             mealEventTitles = this[Keys.mealEventTitles] ?: d.mealEventTitles,
+            mealOffsets = this[Keys.mealOffsets]?.mapNotNull { it.toIntOrNull() }?.toSet() ?: d.mealOffsets,
             allDayReminders = this[Keys.allDayReminders] ?: d.allDayReminders,
             allDayReminderMinutes = this[Keys.allDayReminderMinutes] ?: d.allDayReminderMinutes,
             birthdayReminders = this[Keys.birthdayReminders] ?: d.birthdayReminders,
@@ -219,6 +226,7 @@ class SettingsRepository(private val context: Context) {
         this[Keys.mealReminders] = s.mealReminders
         this[Keys.mealReminderMinutesAfter] = s.mealReminderMinutesAfter
         this[Keys.mealEventTitles] = s.mealEventTitles
+        this[Keys.mealOffsets] = s.mealOffsets.map { it.toString() }.toSet()
         this[Keys.allDayReminders] = s.allDayReminders
         this[Keys.allDayReminderMinutes] = s.allDayReminderMinutes
         this[Keys.birthdayReminders] = s.birthdayReminders

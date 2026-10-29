@@ -18,12 +18,16 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -53,6 +57,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -63,13 +68,19 @@ import de.lltntplanet.adhsapp.data.db.SymptomEntity
 import de.lltntplanet.adhsapp.data.routines.Medication
 import de.lltntplanet.adhsapp.data.routines.RoutineLogic
 import de.lltntplanet.adhsapp.data.routines.RoutineOccurrence
+import de.lltntplanet.adhsapp.ui.components.DatePickDialog
 import de.lltntplanet.adhsapp.ui.components.TimePickDialog
 import de.lltntplanet.adhsapp.util.TimeFormat
 import java.time.DayOfWeek
+import java.time.LocalDate
 import java.time.LocalTime
+import java.time.ZoneId
 import kotlinx.coroutines.delay
 
-/** Anlegen / Bearbeiten – Name, Art, Dosis, Uhrzeiten und Wochentage, angelehnt an MyTherapy. */
+/**
+ * Anlegen / Bearbeiten – Name, Art, Dosis, Uhrzeiten und Wochentage, angelehnt an MyTherapy.
+ * Alternativ einmalig: ein bestimmtes Datum mit Uhrzeit(en), ohne Wiederholung.
+ */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun RoutineEditorSheet(
@@ -87,6 +98,8 @@ fun RoutineEditorSheet(
     onCheckupChosen: () -> Unit = {},
     /** Vorausgewählte Art beim Neuanlegen (z. B. direkt „Checkup“). */
     initialKind: RoutineKind = RoutineKind.MEDICATION,
+    /** Beim Neuanlegen gleich „Einmalig“ vorauswählen. */
+    initialOnce: Boolean = false,
 ) {
     var name by remember { mutableStateOf(routine?.name.orEmpty()) }
     var suggestions by remember { mutableStateOf<List<Medication>>(emptyList()) }
@@ -96,10 +109,26 @@ fun RoutineEditorSheet(
     var dose by remember { mutableStateOf(routine?.dose.orEmpty()) }
     val times = remember { (routine?.let { RoutineLogic.times(it) } ?: listOf(8 * 60)).toMutableStateList() }
     var weekdays by remember { mutableIntStateOf(routine?.weekdays ?: RoutineEntity.ALL_DAYS) }
+    val zone = remember { ZoneId.systemDefault() }
+    /** Einmalig: nur an [onceDay] zu den Uhrzeiten, ohne Wiederholung. */
+    var once by remember { mutableStateOf(routine?.isOnce ?: initialOnce) }
+    var onceDay by remember {
+        mutableStateOf(
+            routine?.let { RoutineLogic.onceDate(it) }
+                ?: if (initialOnce) RoutineLogic.suggestedOnceDate(times, System.currentTimeMillis(), zone) else null,
+        )
+    }
+    /** Datum selbst gewählt? Sonst folgt der Vorschlag (heute bzw. morgen) den Uhrzeiten. */
+    var dateTouched by remember { mutableStateOf(routine?.isOnce == true) }
+    var pickingDate by remember { mutableStateOf(false) }
     var pickingTime by remember { mutableStateOf<Int?>(null) } // Index in times, -1 = neu
     var confirmDelete by remember { mutableStateOf(false) }
-    val valid = name.isNotBlank() && times.isNotEmpty() && weekdays != 0
+    val valid = name.isNotBlank() && times.isNotEmpty() && (if (once) onceDay != null else weekdays != 0)
     val checkup = kind == RoutineKind.CHECKUP
+
+    LaunchedEffect(once, times.toList()) {
+        if (once && !dateTouched) onceDay = RoutineLogic.suggestedOnceDate(times, System.currentTimeMillis(), zone)
+    }
 
     LaunchedEffect(kind) {
         if (checkup) {
@@ -209,7 +238,53 @@ fun RoutineEditorSheet(
             )
 
             Spacer(Modifier.height(16.dp))
-            Text("Uhrzeiten", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text("Wiederholung", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(6.dp))
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                SegmentedButton(
+                    selected = !once,
+                    onClick = { once = false },
+                    shape = SegmentedButtonDefaults.itemShape(0, 2),
+                    icon = { Icon(Icons.Filled.Repeat, null) },
+                    modifier = Modifier.testTag("routine-regular"),
+                ) { Text("Regelmäßig") }
+                SegmentedButton(
+                    selected = once,
+                    onClick = { once = true },
+                    shape = SegmentedButtonDefaults.itemShape(1, 2),
+                    icon = { Icon(Icons.Filled.Event, null) },
+                    modifier = Modifier.testTag("routine-once"),
+                ) { Text("Einmalig") }
+            }
+            if (once) {
+                Spacer(Modifier.height(12.dp))
+                Text("Datum", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                AssistChip(
+                    onClick = { pickingDate = true },
+                    label = { Text(onceDay?.let { onceDateLabel(it) } ?: "Datum wählen") },
+                    leadingIcon = { Icon(Icons.Filled.CalendarMonth, null) },
+                    modifier = Modifier.testTag("routine-once-date"),
+                )
+                Text(
+                    "Nur an diesem Tag, ohne Wiederholung – z. B. eine einzelne Tablette, einmal Blutdruck messen " +
+                        "oder ein zusätzlicher Checkup.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (routine != null && !routine.isOnce) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Achtung: „${routine.name}“ erinnert dann nicht mehr regelmäßig, sondern nur noch an diesem Tag. " +
+                            "Für eine zusätzliche Einnahme lieber über „Einmalig“ auf der Routinen-Seite neu anlegen.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Text(if (once && times.size <= 1) "Uhrzeit" else "Uhrzeiten", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(6.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 times.sorted().forEach { t ->
@@ -238,26 +313,33 @@ fun RoutineEditorSheet(
             if (times.isEmpty()) {
                 Text("Mindestens eine Uhrzeit angeben.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
+            val day = onceDay
+            val pastHint = if (once && day != null) RoutineLogic.pastTimesHint(day, times, System.currentTimeMillis(), zone) else null
+            if (pastHint != null) {
+                Text(pastHint, color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodySmall)
+            }
 
-            Spacer(Modifier.height(16.dp))
-            Text("Wochentage", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                DayOfWeek.entries.forEach { d ->
-                    FilterChip(
-                        selected = RoutineLogic.hasWeekday(weekdays, d),
-                        onClick = { weekdays = RoutineLogic.toggleWeekday(weekdays, d) },
-                        label = { Text(RoutineLogic.shortDay(d)) },
-                        modifier = Modifier.weight(1f),
-                    )
+            if (!once) {
+                Spacer(Modifier.height(16.dp))
+                Text("Wochentage", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                    DayOfWeek.entries.forEach { d ->
+                        FilterChip(
+                            selected = RoutineLogic.hasWeekday(weekdays, d),
+                            onClick = { weekdays = RoutineLogic.toggleWeekday(weekdays, d) },
+                            label = { Text(RoutineLogic.shortDay(d)) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = { weekdays = RoutineEntity.ALL_DAYS }) { Text("Täglich") }
-                TextButton(onClick = { weekdays = 0b0011111 }) { Text("Mo–Fr") }
-            }
-            if (weekdays == 0) {
-                Text("Mindestens einen Wochentag wählen.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { weekdays = RoutineEntity.ALL_DAYS }) { Text("Täglich") }
+                    TextButton(onClick = { weekdays = 0b0011111 }) { Text("Mo–Fr") }
+                }
+                if (weekdays == 0) {
+                    Text("Mindestens einen Wochentag wählen.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
             }
 
             Spacer(Modifier.height(20.dp))
@@ -272,6 +354,7 @@ fun RoutineEditorSheet(
                 Spacer(Modifier.width(8.dp))
                 Button(
                     enabled = valid,
+                    modifier = Modifier.testTag("routine-save"),
                     onClick = {
                         onSave(
                             (routine ?: RoutineEntity(name = "", times = "")).copy(
@@ -280,12 +363,24 @@ fun RoutineEditorSheet(
                                 dose = if (checkup) "" else dose.trim(),
                                 times = RoutineLogic.encodeTimes(times),
                                 weekdays = weekdays,
+                                onceEpochDay = if (once) onceDay?.toEpochDay() else null,
                             ),
                         )
                     },
                 ) { Text("Speichern") }
             }
         }
+    }
+
+    if (pickingDate) {
+        DatePickDialog(
+            initial = onceDay ?: LocalDate.now(zone),
+            onDismiss = { pickingDate = false },
+            onPick = {
+                onceDay = it
+                dateTouched = true
+            },
+        )
     }
 
     pickingTime?.let { index ->
@@ -318,6 +413,12 @@ fun RoutineEditorSheet(
 }
 
 const val DEFAULT_CHECKUP_NAME = "Gefühls-Checkup"
+
+/** „Morgen · Freitag, 30. Oktober“ bzw. nur „Montag, 3. November“, wenn es weder heute, morgen noch gestern ist. */
+private fun onceDateLabel(date: LocalDate, today: LocalDate = LocalDate.now()): String {
+    val full = TimeFormat.fullDate(date, today)
+    return if (date in today.minusDays(1)..today.plusDays(1)) "${TimeFormat.relativeDay(date, today)} · $full" else full
+}
 
 /** Aufklappliste unter dem Namensfeld: Treffer aus der Medikamenten-Liste. */
 @Composable
@@ -395,7 +496,7 @@ fun OccurrenceSheet(
                 OutlinedButton(onClick = onSkip, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Filled.SkipNext, null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Heute überspringen")
+                    Text(if (o.routine.isOnce) "Überspringen" else "Heute überspringen")
                 }
             }
             Spacer(Modifier.height(8.dp))
