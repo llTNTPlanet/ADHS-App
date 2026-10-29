@@ -44,7 +44,8 @@ class DispenserRepository(
             // Smart Life & Co. melden auch Lampen und Kameras – von dort nur Meldungen behalten, die den Spender nennen.
             if (!dedicated && !DispenserLogic.mentionsDispenser(n.title, n.text)) return null
             val subject = n.latestLine ?: n.text
-            val kind = DispenserLogic.classify(n.title, subject)
+            val reading = DispenserLogic.read(n.title, subject)
+            val kind = reading.kind
             var event = DispenserEventEntity(
                 postedAt = n.postedAt,
                 notificationKey = n.key,
@@ -61,7 +62,7 @@ class DispenserRepository(
                     routines.log(day.minusDays(1), day),
                     n.postedAt,
                     zone,
-                    DispenserLogic.timesIn("${n.title}\n$subject"),
+                    DispenserLogic.timesIn(reading.takenText),
                 )
             } else {
                 null
