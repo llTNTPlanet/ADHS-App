@@ -66,6 +66,20 @@ Weitere Bilder: [Einrichtung](docs/screenshots/01-einrichtung.png), [Essen](docs
   jederzeit hinzufügen und entfernen. Die Werte landen in einer **Statistik** (7/30/90 Tage) mit Durchschnitt, Trend
   zum Vorzeitraum und Verlaufslinie je Symptom; die Erinnerung hat einen „Jetzt ausfüllen“-Knopf
 
+**Medikamentenspender Memio Go** (über die App iDispenser)
+- Medikamente lassen sich als „Im Medikamentenspender“ markieren. Die App liest dann die Benachrichtigungen von
+  iDispenser mit (Benachrichtigungszugriff, Einstellungen → Medikamentenspender): Meldet der Spender „genommen“, werden
+  alle Spender-Medikamente der letzten Einnahmezeit davor automatisch abgehakt (sie liegen im selben Fach) und als
+  „genommen (Spender)“ angezeigt. Haken oder „Übersprungen“ von Hand bleiben unangetastet. Verneinungen, Fragen
+  und Aufforderungen („nicht genommen“, „Hast du … genommen?“) zählen nicht als Einnahme; abgehakt wird nur auf
+  Meldungen von iDispenser selbst. Eine schon angezeigte Erinnerung zu dieser Einnahme verschwindet dann.
+- Der Spender klingelt selbst – die eigene Erinnerung der App kommt für Spender-Medikamente deshalb erst später als
+  Rückfall (gleichzeitig, 15/30/60 Min. später oder gar nicht; Standard 30 Min.) und entfällt, wenn der Spender vorher
+  „genommen“ meldet. Ist der Benachrichtigungszugriff nicht erlaubt, erinnert die App wie bei jedem anderen Medikament.
+- Die Einstellungen zeigen die zuletzt mitgelesenen Meldungen mit ihrer Einordnung (genommen, verpasst, fällig,
+  nachfüllen, unbekannt), damit sich die Erkennung an die echten Texte anpassen lässt. Am Spender selbst ändert sich
+  nichts; Alarme werden weiter in iDispenser oder am Gerät eingestellt.
+
 **Aufgaben**
 - Überfällig / Heute / Morgen / Demnächst / Ohne Datum, Fortschrittsbalken „3 von 5 geschafft“
 - Überfälliges mit einem Tipp „Auf morgen verschieben“
@@ -234,6 +248,9 @@ Hintergrund (alle 4 Stunden) nach einer neueren Version:
 Alles bleibt auf deinem Handy. Kalender und Kontakte werden aus dem Google-Konto auf dem Gerät gelesen,
 Gesundheitsdaten werden nur gelesen und lokal zwischengespeichert. Es gibt keinen eigenen Server und keine Analyse-Tools.
 Der GitHub-Token für Updates liegt im privaten App-Speicher und ist von Geräte-Backups ausgenommen.
+Für den Medikamentenspender liest die App nur Benachrichtigungen der Apps iDispenser, Smart Life und Tuya Smart mit
+(von den beiden letzten nur Meldungen, die den Spender oder Medikamente nennen) und speichert sie 90 Tage auf dem
+Handy. „Liste leeren“ blendet die Meldungen nur aus.
 
 ## Technik
 
@@ -246,6 +263,12 @@ Der GitHub-Token für Updates liegt im privaten App-Speicher und ist von Geräte
   strukturierte JSON-Ausgabe, Server-Fallback bei Ablehnung); Foto wird vorher auf 1280 px verkleinert
 - Health Connect (`androidx.health.connect:connect-client`): `NutritionRecord` je Mahlzeit mit fester Client-Kennung,
   Berechtigung `WRITE_NUTRITION`, Erklärungs-Activity für den Berechtigungsdialog
+- Medikamentenspender: `NotificationListenerService` (`DispenserListener`) für die Pakete `com.dispenser`
+  (iDispenser, Tuya-Hersteller-App) sowie `com.tuya.smartlife`/`com.tuya.smart`; Einordnung per Stichwörtern als
+  ganze Wörter (Deutsch/Englisch, Verneinung und Fragen ausgenommen, bei Sammel-Benachrichtigungen nur die neueste
+  Zeile) und Zuordnung zur letzten Einnahmezeit davor (5 Min. Toleranz, höchstens 12 Std. zurück; nennt der Text genau
+  eine noch offene Einnahmezeit, hat sie Vorrang, Zeiten nach „nächste“/„next“ zählen nicht) in `DispenserLogic`; Room-Tabelle `dispenser_events`, `routines.dispenser`,
+  `routine_log.byDispenser` (DB-Version 6)
 - Erinnerungen: genau ein exakter Alarm auf die jeweils nächste Erinnerung (`AlarmManager`), Benachrichtigung mit
   Full-Screen-Intent, Vollbild-Activity über dem Sperrbildschirm; Neuplanung nach Neustart, Zeitänderung,
   Kalender-/Kontaktänderungen und alle 30 Minuten als Sicherheitsnetz

@@ -50,11 +50,29 @@ class RoutineRepository(
         onChanged()
     }
 
-    /** Aus einer Erinnerung heraus abhaken: der Zeitpunkt steckt in [atMillis]. */
+    /**
+     * Aus einer Erinnerung heraus abhaken: der Zeitpunkt steckt in [atMillis]. Ein schon vorhandener Eintrag
+     * (z. B. vom Medikamentenspender) bleibt stehen.
+     */
     suspend fun setDoneAt(routineId: Long, atMillis: Long, zone: ZoneId = ZoneId.systemDefault()) {
         val z = Dates.toZoned(atMillis, zone)
-        setDone(routineId, z.toLocalDate(), z.hour * 60 + z.minute, true)
+        dao.insertLogIfAbsent(RoutineLogEntity(routineId = routineId, epochDay = z.toLocalDate().toEpochDay(), minutes = z.hour * 60 + z.minute))
+        onChanged()
     }
+
+    /**
+     * Vom Medikamentenspender gemeldet: abhaken, aber nur, wenn die Einnahme noch offen ist – ein Haken oder
+     * „Übersprungen“ von Hand bleibt stehen. true, wenn neu abgehakt.
+     */
+    suspend fun setDoneByDispenser(routineId: Long, date: LocalDate, minutes: Int, at: Long): Boolean {
+        val id = dao.insertLogIfAbsent(
+            RoutineLogEntity(routineId = routineId, epochDay = date.toEpochDay(), minutes = minutes, doneAt = at, byDispenser = true),
+        )
+        return id != -1L
+    }
+
+    /** Neu planen lassen, z. B. nachdem der Spender mehrere Einnahmen abgehakt hat. */
+    fun notifyChanged() = onChanged()
 
     suspend fun purgeOldLog(days: Long) = dao.purgeLog(LocalDate.now().minusDays(days).toEpochDay())
 }

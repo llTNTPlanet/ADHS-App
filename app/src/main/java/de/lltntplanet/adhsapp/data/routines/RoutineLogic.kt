@@ -17,8 +17,10 @@ data class RoutineOccurrence(
     val at: Long,
     val done: Boolean = false,
     val skipped: Boolean = false,
+    /** Vom Medikamentenspender als genommen gemeldet (automatisch abgehakt). */
+    val byDispenser: Boolean = false,
 ) {
-    val key: String get() = "rt:${routine.id}:${date.toEpochDay()}:$minutes"
+    val key: String get() = RoutineLogic.occurrenceKey(routine.id, date.toEpochDay(), minutes)
     val epochDay: Long get() = date.toEpochDay()
 }
 
@@ -27,6 +29,12 @@ object RoutineLogic {
 
     /** Wie lange nach der Uhrzeit eine verpasste Erinnerung noch nachgeholt wird. */
     const val CATCH_UP_MILLIS = 3L * 60 * 60 * 1000
+
+    /** Schlüssel eines Vorkommens, zugleich der Schlüssel seiner Erinnerung. */
+    fun occurrenceKey(routineId: Long, epochDay: Long, minutes: Int): String = "rt:$routineId:$epochDay:$minutes"
+
+    /** Schlüssel aller Vorkommen, die im Protokoll stehen, also abgehakt oder übersprungen sind. */
+    fun doneKeys(log: List<RoutineLogEntity>): Set<String> = log.mapTo(HashSet()) { occurrenceKey(it.routineId, it.epochDay, it.minutes) }
 
     fun parseTimes(times: String): List<Int> =
         times.split(',').mapNotNull { it.trim().toIntOrNull() }.filter { it in 0 until 24 * 60 }.distinct().sorted()
@@ -161,6 +169,7 @@ object RoutineLogic {
                         at = Dates.atMinutes(date, m, zone),
                         done = entry != null && !entry.skipped,
                         skipped = entry?.skipped == true,
+                        byDispenser = entry?.byDispenser == true,
                     )
                 }
             }

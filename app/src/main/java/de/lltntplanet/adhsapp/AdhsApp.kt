@@ -8,6 +8,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import de.lltntplanet.adhsapp.data.birthdays.BirthdayRepository
 import de.lltntplanet.adhsapp.data.calendar.CalendarRepository
 import de.lltntplanet.adhsapp.data.db.AppDatabase
+import de.lltntplanet.adhsapp.data.dispenser.DispenserRepository
 import de.lltntplanet.adhsapp.data.google.GoogleAuth
 import de.lltntplanet.adhsapp.data.google.GoogleAuthTokenProvider
 import de.lltntplanet.adhsapp.data.google.GoogleHttp
@@ -98,6 +99,8 @@ class AppContainer(val app: Application) {
     val tasksSync = GoogleTasksSync(GoogleTasksApi(http), db.taskDao(), settings) { requestReschedule() }
 
     val notifier = ReminderNotifier(app)
+    /** Meldungen des Medikamentenspenders (Memio Go über iDispenser), mitgelesen aus deren Benachrichtigungen. */
+    val dispenser = DispenserRepository(db.dispenserDao(), routines) { key -> notifier.cancelKey(key) }
     val reminderEngine = ReminderEngine(app, calendar, birthdays, db.taskDao(), db.routineDao(), db.reminderDao(), settings)
     val refresher = DataRefresher(settings, health, tasksSync, reminderEngine, scope)
 

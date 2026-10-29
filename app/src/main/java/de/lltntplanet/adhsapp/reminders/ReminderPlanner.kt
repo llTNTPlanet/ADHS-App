@@ -185,6 +185,8 @@ object ReminderPlanner {
     /**
      * Routinen und Medikamente: eine Erinnerung je Uhrzeit und Tag. Schon abgehakte oder übersprungene
      * Einnahmen (z. B. vorab genommen) lösen nichts mehr aus. Verpasste kommen bis zu drei Stunden nach.
+     * Medikamente im Spender klingeln dort selbst: Die eigene Erinnerung kommt erst [dispenserDelayMinutes]
+     * später als Rückfall – meldet der Spender vorher „genommen“, ist sie abgehakt und fällt weg. null = keine.
      */
     fun planRoutines(
         routines: List<RoutineEntity>,
@@ -192,10 +194,19 @@ object ReminderPlanner {
         from: LocalDate,
         toInclusive: LocalDate,
         zone: ZoneId,
+        dispenserDelayMinutes: Int? = 0,
+        /** Liest die App den Spender überhaupt mit (Benachrichtigungszugriff)? Sonst wie jedes andere Medikament. */
+        dispenserWatched: Boolean = true,
     ): List<Reminder> =
         RoutineLogic.occurrences(routines, log, from, toInclusive, zone)
             .filter { !it.done && !it.skipped }
-            .map { o ->
+            .mapNotNull { o ->
+                val inDispenser = dispenserWatched && o.routine.dispenser && o.routine.kind == RoutineKind.MEDICATION
+                val delayMinutes = if (inDispenser) dispenserDelayMinutes ?: return@mapNotNull null else 0
+                val detail = listOfNotNull(
+                    o.routine.dose.ifBlank { null },
+                    if (inDispenser) "Der Spender hat noch keine Entnahme gemeldet." else null,
+                ).joinToString(" · ").ifBlank { null }
                 Reminder(
                     key = o.key,
                     kind = when (o.routine.kind) {
@@ -203,9 +214,9 @@ object ReminderPlanner {
                         RoutineKind.ROUTINE -> ReminderKind.ROUTINE
                         RoutineKind.CHECKUP -> ReminderKind.CHECKUP
                     },
-                    triggerAt = o.at,
+                    triggerAt = o.at + delayMinutes * 60_000L,
                     title = o.routine.name,
-                    detail = o.routine.dose.ifBlank { null },
+                    detail = detail,
                     targetTime = o.at,
                     targetEnd = o.at + RoutineLogic.CATCH_UP_MILLIS,
                     refId = o.routine.id,

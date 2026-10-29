@@ -30,6 +30,14 @@ jobs:
       - name: Lint, Tests und APK
         run: ./gradlew lintDebug testDebugUnitTest assembleDebug
 
+      # Room schreibt das Schema der aktuellen DB-Version nach app/schemas. Weicht es vom eingecheckten ab,
+      # fehlt eine Schema-Datei für spätere Migrationen.
+      - name: Room-Schema eingecheckt?
+        run: |
+          git status --porcelain -- app/schemas
+          git diff --exit-code -- app/schemas
+          test -z "$(git status --porcelain -- app/schemas)"
+
       - name: SHA-1 für den Android-OAuth-Client anzeigen
         run: ./gradlew :app:signingReport | grep -E "^(Variant|SHA1)" | head -n 4
 

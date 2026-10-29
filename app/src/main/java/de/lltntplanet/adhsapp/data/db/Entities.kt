@@ -1,5 +1,6 @@
 package de.lltntplanet.adhsapp.data.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -115,6 +116,12 @@ data class RoutineEntity(
     /** Pausiert = keine Erinnerungen, bleibt aber in der Liste. */
     val active: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
+    /**
+     * Liegt im Medikamentenspender (Memio Go): Meldet die App iDispenser „genommen“, wird die Einnahme
+     * automatisch abgehakt. Die eigene Erinnerung kommt dann erst später als Rückfall (Einstellungen).
+     */
+    @ColumnInfo(defaultValue = "0")
+    val dispenser: Boolean = false,
 ) {
     companion object {
         const val ALL_DAYS = 0b1111111
@@ -135,6 +142,9 @@ data class RoutineLogEntity(
     val minutes: Int,
     val skipped: Boolean = false,
     val doneAt: Long = System.currentTimeMillis(),
+    /** Automatisch abgehakt, weil der Medikamentenspender die Entnahme gemeldet hat. */
+    @ColumnInfo(defaultValue = "0")
+    val byDispenser: Boolean = false,
 )
 
 /**
@@ -164,4 +174,41 @@ data class MoodEntryEntity(
     /** Stärke 1 (gar nicht) bis 10 (sehr stark). */
     val value: Int,
     val recordedAt: Long = System.currentTimeMillis(),
+)
+
+/** Art einer mitgelesenen Meldung des Medikamentenspenders. */
+enum class DispenserEventKind(val label: String) {
+    /** Fach geleert: Einnahme wird abgehakt. */
+    TAKEN("Genommen"),
+    MISSED("Verpasst"),
+    /** Einnahmezeit ist da, das Fach ist offen. */
+    DUE("Fällig"),
+    REFILL("Nachfüllen"),
+    /** Nicht erkannt – bleibt zur Ansicht gespeichert, damit die Erkennung angepasst werden kann. */
+    OTHER("Unbekannt"),
+}
+
+/**
+ * Eine Benachrichtigung der Spender-App (iDispenser für den Memio Go), mitgelesen über den
+ * Benachrichtigungszugriff. Gespeichert wird nur, was in der Benachrichtigung steht.
+ */
+@Entity(
+    tableName = "dispenser_events",
+    indices = [Index(value = ["notificationKey", "postedAt"], unique = true), Index(value = ["postedAt"])],
+)
+data class DispenserEventEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    /** Zeitpunkt der Benachrichtigung (StatusBarNotification.postTime). */
+    val postedAt: Long,
+    /** Schlüssel der Benachrichtigung – zusammen mit [postedAt] gegen doppelte Einträge. */
+    val notificationKey: String,
+    val packageName: String,
+    val title: String,
+    val text: String,
+    val kind: DispenserEventKind,
+    /** Bei „genommen“: Tag (epochDay) und Uhrzeit (Minuten) der abgehakten Einnahme, sonst null. */
+    val matchedEpochDay: Long? = null,
+    val matchedMinutes: Int? = null,
+    /** Namen der dabei abgehakten Medikamente, für die Anzeige. */
+    val matchedNames: String = "",
 )

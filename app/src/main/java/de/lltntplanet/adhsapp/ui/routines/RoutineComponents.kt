@@ -110,6 +110,7 @@ fun OccurrenceRow(
             val dayPrefix = if (showDay && o.date != today) "${TimeFormat.relativeDay(o.date, today)}, " else ""
             val status = when {
                 o.skipped -> "übersprungen"
+                o.done && o.byDispenser -> "${doneWord(o.routine.kind)} (Spender)"
                 o.done -> doneWord(o.routine.kind)
                 overdue -> "noch offen"
                 o.at > now -> TimeFormat.countdown(o.at, now)
