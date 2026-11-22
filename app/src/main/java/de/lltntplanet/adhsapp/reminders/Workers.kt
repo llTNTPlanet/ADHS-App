@@ -17,8 +17,8 @@ import java.time.Duration
 import java.util.concurrent.TimeUnit
 
 /**
- * Läuft etwa alle 30 Minuten: plant Erinnerungen neu (Sicherheitsnetz, falls ein Alarm verloren ging)
- * und gleicht Google Tasks ab.
+ * Läuft etwa alle 30 Minuten: plant Erinnerungen neu (Sicherheitsnetz, falls ein Alarm verloren ging),
+ * gleicht Google Tasks ab und frischt die Übersicht auf der Uhr auf.
  */
 class MaintenanceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
@@ -30,6 +30,8 @@ class MaintenanceWorker(context: Context, params: WorkerParameters) : CoroutineW
         c.tasks.purgeOldDone(30L * 24 * 60 * 60 * 1000)
         c.routines.purgeOldLog(90)
         c.dispenser.purgeOld(90)
+        // Übersicht für die Uhr: fängt den Tageswechsel ab und hält ihren Stand frisch. Ohne Uhr passiert nichts.
+        c.watchSync.syncAndWait()
         return Result.success()
     }
 
@@ -47,9 +49,12 @@ class MaintenanceWorker(context: Context, params: WorkerParameters) : CoroutineW
 /** Reagiert auf Änderungen im Kalender oder in den Kontakten (z. B. neuer Termin aus Google Kalender). */
 class CalendarChangeWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        (applicationContext as AdhsApp).container.reminderEngine.reschedule()
+        val c = (applicationContext as AdhsApp).container
+        c.reminderEngine.reschedule()
         // Inhalts-Trigger gelten nur einmal – für die nächste Änderung neu einreihen.
         enqueue(applicationContext, ExistingWorkPolicy.APPEND_OR_REPLACE)
+        // Geänderte Termine und Geburtstage auch auf die Uhr bringen. Ohne Uhr passiert nichts.
+        c.watchSync.syncAndWait()
         return Result.success()
     }
 

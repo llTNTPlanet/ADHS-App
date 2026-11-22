@@ -99,6 +99,12 @@ class WatchLink(context: Context, private val scope: CoroutineScope) {
     }
 
     /**
+     * Lohnt es sich, im Hintergrund etwas für die Uhr vorzubereiten (z. B. die Übersicht)? Nur wenn die Uhr-App schon
+     * einmal gesehen wurde und die Google-Dienste nutzbar sind – Handys ohne Uhr tun dann gar nichts.
+     */
+    fun isWatchExpected(): Boolean = watchAppKnown && playServicesUsable()
+
+    /**
      * Sucht die verbundene Uhr mit installierter Uhr-App; eine direkt (per Bluetooth) verbundene wird bevorzugt.
      * `null`, wenn keine erreichbar ist oder die Suche länger als [timeoutMillis] dauert.
      */

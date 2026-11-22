@@ -6,6 +6,7 @@ import com.google.android.gms.tasks.Tasks
 import com.google.android.gms.wearable.CapabilityInfo
 import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataEventBuffer
+import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.WearableListenerService
 import de.lltntplanet.adhsapp.AdhsApp
 import de.lltntplanet.adhsapp.AppContainer
@@ -19,6 +20,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 /**
  * Nimmt entgegen, was die Uhr-App schickt – auch wenn die Handy-App gerade nicht läuft:
  * - Knöpfe einer Erinnerung und Haken in der Übersicht (Anfragen mit Antwort „ausgeführt“ oder „fehlgeschlagen“),
+ * - die Bitte, die Übersicht neu zu schicken,
  * - den Zustand der Uhr-App (Version, Berechtigungen) für die Einstellungen,
  * - dass eine Uhr mit der Uhr-App dazugekommen oder weggefallen ist.
  */
@@ -48,7 +50,18 @@ class PhoneWatchListenerService : WearableListenerService() {
             Log.w(TAG, "Aktion von der Uhr fehlgeschlagen ($path)", e)
             false
         }
+        // Die Übersicht auf der Uhr soll den neuen Stand gleich zeigen. Kurz darauf warten, solange der Dienst noch
+        // läuft – die Antwort an die Uhr hält das kaum auf.
+        if (done) syncOverview(c, force = false, waitMillis = SYNC_AFTER_ACTION_MILLIS)
         return Tasks.forResult(if (done) WatchReply.OK else WatchReply.FAILED)
+    }
+
+    /** Die Uhr-App bittet darum, die Übersicht neu zu schicken ([WatchPaths.SYNC_REQUEST]) – z. B. beim Öffnen. */
+    override fun onMessageReceived(messageEvent: MessageEvent) {
+        if (messageEvent.path != WatchPaths.SYNC_REQUEST) return
+        val c = container ?: return
+        c.watch.noteWatchSeen()
+        syncOverview(c, force = true, waitMillis = WatchSync.BRIEF_WAIT_MILLIS)
     }
 
     /** Die Uhr-App hat ihren Zustand neu abgelegt ([WatchPaths.WATCH_INFO]). */
@@ -62,9 +75,24 @@ class PhoneWatchListenerService : WearableListenerService() {
         }
     }
 
-    /** Eine Uhr mit der Uhr-App ist dazugekommen oder weggefallen. */
+    /**
+     * Eine Uhr mit der Uhr-App ist dazugekommen oder weggefallen. Ist sie (wieder) verbunden, gleicht [WatchSync]
+     * die Übersicht von selbst ab.
+     */
     override fun onCapabilityChanged(capabilityInfo: CapabilityInfo) {
         container?.watch?.onCapabilityChanged(capabilityInfo)
+    }
+
+    /**
+     * Gleicht die Übersicht für die Uhr ab und wartet höchstens [waitMillis] darauf: Nur solange dieser Aufruf läuft,
+     * bleibt der Prozess sicher wach. Dauert es länger, läuft der Abgleich im Hintergrund weiter.
+     */
+    private fun syncOverview(c: AppContainer, force: Boolean, waitMillis: Long) {
+        try {
+            runBlocking { c.watchSync.syncAndWait(force, waitMillis) }
+        } catch (e: Exception) {
+            Log.w(TAG, "Übersicht für die Uhr konnte nicht abgeglichen werden", e)
+        }
     }
 
     private fun watchInfoOf(event: DataEvent): WatchInfo? {
@@ -80,5 +108,8 @@ class PhoneWatchListenerService : WearableListenerService() {
 
         /** So lange darf eine Aktion der Uhr höchstens dauern, bevor „fehlgeschlagen“ zurückgeht. */
         const val ACTION_MILLIS = 8_000L
+
+        /** So lange wartet die Antwort an die Uhr höchstens auf die neue Übersicht. */
+        const val SYNC_AFTER_ACTION_MILLIS = 1_500L
     }
 }

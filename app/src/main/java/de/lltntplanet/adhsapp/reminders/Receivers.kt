@@ -9,6 +9,7 @@ import de.lltntplanet.adhsapp.AdhsApp
 import de.lltntplanet.adhsapp.BuildConfig
 import de.lltntplanet.adhsapp.update.ApkInstaller
 import de.lltntplanet.adhsapp.update.UpdateWorker
+import de.lltntplanet.adhsapp.watch.WatchSync
 import kotlinx.coroutines.launch
 
 private fun BroadcastReceiver.runAsync(context: Context, block: suspend (AdhsApp) -> Unit) {
@@ -57,6 +58,10 @@ class ReminderActionReceiver : BroadcastReceiver() {
             reminder,
             intent.getIntExtra(EXTRA_MINUTES, ReminderActionHandler.DEFAULT_SNOOZE_MINUTES),
         )
+        // Abgehakt: Die Übersicht auf der Uhr soll das gleich zeigen – auch wenn die App sonst gerade nicht läuft.
+        if (action == ReminderActionHandler.Action.DONE) {
+            app.container.watchSync.syncAndWait(timeoutMillis = WatchSync.BRIEF_WAIT_MILLIS)
+        }
     }
 
     companion object {
@@ -98,6 +103,8 @@ class SystemEventsReceiver : BroadcastReceiver() {
             ApkInstaller.cleanup(context)
             app.container.updateNotifier.notifyUpdated(BuildConfig.VERSION_NAME)
         }
+        // Neue Uhrzeit oder Zeitzone verschiebt auch die Übersicht auf der Uhr. Ohne Uhr passiert nichts.
+        app.container.watchSync.syncAndWait(timeoutMillis = WatchSync.BRIEF_WAIT_MILLIS)
     }
 
     companion object {

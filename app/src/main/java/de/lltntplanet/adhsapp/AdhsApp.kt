@@ -43,6 +43,7 @@ import de.lltntplanet.adhsapp.update.UpdateNotifier
 import de.lltntplanet.adhsapp.update.UpdateWorker
 import de.lltntplanet.adhsapp.watch.ReminderDelivery
 import de.lltntplanet.adhsapp.watch.WatchLink
+import de.lltntplanet.adhsapp.watch.WatchSync
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -66,6 +67,8 @@ open class AdhsApp : Application() {
         UpdateWorker.ensureScheduled(this)
         CalendarChangeWorker.enqueue(this)
         RefreshWorker.ensureScheduled(this)
+        // Übersicht für die Uhr aktuell halten: beobachtet nur – ohne Uhr wird nichts erzeugt und nichts gesendet.
+        container.watchSync.start()
         container.requestReschedule()
         // Uhr suchen (für die Einstellungen und damit der Alarm weiß, ob sich das Warten auf die Uhr lohnt).
         // Läuft im Hintergrund und fängt alle Fehler ab – auch auf Handys ohne Uhr oder ohne Google-Dienste.
@@ -106,6 +109,10 @@ class AppContainer(val app: Application) {
 
     /** Verbindung zur Uhr-App (Wear OS). Ohne Uhr oder ohne Google-Dienste passiert darin einfach nichts. */
     val watch = WatchLink(app, scope)
+    /** Abgleich der Übersicht („Heute“ und Unterseiten) mit der Uhr-App – schreibt nur, wenn sich etwas geändert hat. */
+    val watchSync = WatchSync(
+        app, scope, watch, settings, calendar, birthdays, health, db.taskDao(), db.routineDao(), db.foodDao(),
+    )
     val notifier = ReminderNotifier(app, watch) { settingsState.value.ringTarget }
     /** Meldungen des Medikamentenspenders (Memio Go über iDispenser), mitgelesen aus deren Benachrichtigungen. */
     val dispenser = DispenserRepository(db.dispenserDao(), routines) { key -> notifier.cancelKey(key) }
@@ -133,7 +140,10 @@ class AppContainer(val app: Application) {
 
     private var rescheduleJob: Job? = null
 
-    /** Plant Erinnerungen neu; mehrere schnelle Aufrufe werden zusammengefasst. */
+    /**
+     * Plant Erinnerungen neu; mehrere schnelle Aufrufe werden zusammengefasst. Was die Erinnerungen ändert, ändert
+     * auch die Übersicht auf der Uhr – sie wird gleich mit abgeglichen (ohne Uhr passiert dabei nichts).
+     */
     @Synchronized
     fun requestReschedule() {
         rescheduleJob?.cancel()
@@ -142,5 +152,6 @@ class AppContainer(val app: Application) {
             runCatching { reminderEngine.reschedule() }
                 .onFailure { Log.e("AppContainer", "Neuplanung fehlgeschlagen", it) }
         }
+        watchSync.requestSync()
     }
 }

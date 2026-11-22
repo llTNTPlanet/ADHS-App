@@ -114,7 +114,7 @@ private fun AlertScreen(alerts: AlertController, onClose: () -> Unit) {
                             onClick = { alerts.clearNotice() },
                             modifier = Modifier.fillMaxWidth().transformedHeight(this, spec),
                             transformation = SurfaceTransformation(spec),
-                            label = { Text(text = "OK", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
+                            label = { ButtonLabel("OK") },
                         )
                     }
                 } else if (reminders.isEmpty() && waiting) {
