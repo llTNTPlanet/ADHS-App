@@ -404,11 +404,14 @@ class AlertController(
         }
         orphans.retainAll(keys)
         val ringingKeys = current?.keys.orEmpty()
+        // Sind Vibration und Ton abgeschaltet, vibriert auch der Rückfall nicht. Ist nur der Ton an, vibriert er
+        // trotzdem: Einen Ton kann das System dort nicht spielen, und ganz still ginge die Erinnerung unter.
+        val signal = current == null || current.vibrate || current.sound
         reminders.forEach { reminder ->
             val key = reminder.originKey
             // Die Benachrichtigung des Dienstes pflegt [syncServiceLocked]; verwaiste bleiben, wie sie sind.
             if (key == anchorKey || key in orphans) return@forEach
-            val style = AlertLogic.style(key, ringingKeys, current?.mode, current?.fallbackKey)
+            val style = AlertLogic.style(key, ringingKeys, current?.mode, current?.fallbackKey, signal)
             val before = posted[key]
             if (before == style) return@forEach
             // Eine vom System vibrierende Benachrichtigung hört sicher erst auf, wenn sie ganz verschwindet.

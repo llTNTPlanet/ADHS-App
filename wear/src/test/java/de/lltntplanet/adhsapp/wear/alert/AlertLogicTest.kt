@@ -157,6 +157,18 @@ class AlertLogicTest {
         assertEquals(AlertStyle.QUIET, AlertLogic.style("b", setOf("a", "b"), RingMode.FALLBACK, fallbackKey = "a"))
     }
 
+    @Test
+    fun fallbackStaysSilentWhenVibrationAndSoundAreOff() {
+        assertEquals(
+            AlertStyle.QUIET,
+            AlertLogic.style("a", setOf("a", "b"), RingMode.FALLBACK, fallbackKey = "a", signal = false),
+        )
+        assertEquals(
+            AlertStyle.RINGING,
+            AlertLogic.style("a", setOf("a"), RingMode.SERVICE, fallbackKey = null, signal = false),
+        )
+    }
+
     // ---- text ----
 
     @Test

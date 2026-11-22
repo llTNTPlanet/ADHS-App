@@ -1,5 +1,7 @@
 package de.lltntplanet.adhsapp.wear.ui
 
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -158,22 +160,21 @@ internal fun TransformingLazyColumnItemScope.TaskRow(
 ) {
     val line = if (checked) "erledigt" else WatchFormat.taskLine(task, today)
     val overdue = !checked && WatchSnapshotLogic.isOverdue(task, today)
+    // Stern und zweite Zeile gibt es nicht bei jeder Aufgabe – deshalb stehen sie hier mit ausgeschriebenem Typ.
+    val star: @Composable BoxScope.() -> Unit = {
+        Icon(imageVector = Icons.Filled.Star, contentDescription = "Wichtig", tint = WearColors.Warning)
+    }
+    val secondLine: @Composable RowScope.() -> Unit = {
+        Text(text = line.orEmpty(), color = if (overdue) MaterialTheme.colorScheme.error else Color.Unspecified)
+    }
     CheckboxButton(
         checked = checked,
         onCheckedChange = { value -> onToggle(task, value) },
         modifier = Modifier.fillMaxWidth().transformedHeight(this, spec),
         enabled = !checked || OverviewLogic.canUncheck(task),
         transformation = SurfaceTransformation(spec),
-        icon = if (task.important) {
-            { Icon(imageVector = Icons.Filled.Star, contentDescription = "Wichtig", tint = WearColors.Warning) }
-        } else {
-            null
-        },
-        secondaryLabel = if (line != null) {
-            { Text(text = line, color = if (overdue) MaterialTheme.colorScheme.error else Color.Unspecified) }
-        } else {
-            null
-        },
+        icon = if (task.important) star else null,
+        secondaryLabel = if (line != null) secondLine else null,
         label = { Text(text = task.title) },
     )
 }

@@ -79,10 +79,17 @@ object AlertLogic {
     /**
      * Wie die Benachrichtigung einer Erinnerung aussehen soll. [mode] ist `null`, wenn nichts klingelt. Im
      * Rückfall vibriert nur eine Benachrichtigung ([fallbackKey]) – das System spielt immer nur eine in Schleife.
+     * Sind Vibration und Ton beide abgeschaltet ([signal] = `false`), bleibt auch sie still.
      */
-    fun style(originKey: String, ringing: Set<String>, mode: RingMode?, fallbackKey: String?): AlertStyle = when {
+    fun style(
+        originKey: String,
+        ringing: Set<String>,
+        mode: RingMode?,
+        fallbackKey: String?,
+        signal: Boolean = true,
+    ): AlertStyle = when {
         mode == null || originKey !in ringing -> AlertStyle.QUIET
-        mode == RingMode.FALLBACK -> if (originKey == fallbackKey) AlertStyle.INSISTENT else AlertStyle.QUIET
+        mode == RingMode.FALLBACK -> if (signal && originKey == fallbackKey) AlertStyle.INSISTENT else AlertStyle.QUIET
         else -> AlertStyle.RINGING
     }
 
