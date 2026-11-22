@@ -33,6 +33,7 @@ import de.lltntplanet.adhsapp.data.sync.RefreshWorker
 import de.lltntplanet.adhsapp.data.tasks.TaskRepository
 import de.lltntplanet.adhsapp.reminders.CalendarChangeWorker
 import de.lltntplanet.adhsapp.reminders.MaintenanceWorker
+import de.lltntplanet.adhsapp.reminders.ReminderActionHandler
 import de.lltntplanet.adhsapp.reminders.ReminderEngine
 import de.lltntplanet.adhsapp.reminders.ReminderNotifier
 import de.lltntplanet.adhsapp.update.ApkInstaller
@@ -40,6 +41,8 @@ import de.lltntplanet.adhsapp.update.GitHubReleaseClient
 import de.lltntplanet.adhsapp.update.UpdateManager
 import de.lltntplanet.adhsapp.update.UpdateNotifier
 import de.lltntplanet.adhsapp.update.UpdateWorker
+import de.lltntplanet.adhsapp.watch.ReminderDelivery
+import de.lltntplanet.adhsapp.watch.WatchLink
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -64,6 +67,9 @@ open class AdhsApp : Application() {
         CalendarChangeWorker.enqueue(this)
         RefreshWorker.ensureScheduled(this)
         container.requestReschedule()
+        // Uhr suchen (für die Einstellungen und damit der Alarm weiß, ob sich das Warten auf die Uhr lohnt).
+        // Läuft im Hintergrund und fängt alle Fehler ab – auch auf Handys ohne Uhr oder ohne Google-Dienste.
+        container.watch.refreshStatus()
         // Sichtbar: sofort und dann alle 5 Minuten aktualisieren; im Hintergrund übernimmt der RefreshWorker.
         ProcessLifecycleOwner.get().lifecycle.addObserver(
             object : DefaultLifecycleObserver {
@@ -98,10 +104,16 @@ class AppContainer(val app: Application) {
     val health = HealthRepository(HealthApi(http), settings, auth)
     val tasksSync = GoogleTasksSync(GoogleTasksApi(http), db.taskDao(), settings) { requestReschedule() }
 
-    val notifier = ReminderNotifier(app)
+    /** Verbindung zur Uhr-App (Wear OS). Ohne Uhr oder ohne Google-Dienste passiert darin einfach nichts. */
+    val watch = WatchLink(app, scope)
+    val notifier = ReminderNotifier(app, watch) { settingsState.value.ringTarget }
     /** Meldungen des Medikamentenspenders (Memio Go über iDispenser), mitgelesen aus deren Benachrichtigungen. */
     val dispenser = DispenserRepository(db.dispenserDao(), routines) { key -> notifier.cancelKey(key) }
     val reminderEngine = ReminderEngine(app, calendar, birthdays, db.taskDao(), db.routineDao(), db.reminderDao(), settings)
+    /** Knöpfe einer Erinnerung (Schlummern, Erledigt, Keine weiteren, OK) – für Benachrichtigung und Uhr dieselbe Logik. */
+    val reminderActions = ReminderActionHandler(notifier, reminderEngine, tasks, routines)
+    /** Klingel-Weiche: stellt fällige Erinnerungen je nach Einstellung auf der Uhr und/oder am Handy zu. */
+    val reminderDelivery = ReminderDelivery(watch, notifier)
     val refresher = DataRefresher(settings, health, tasksSync, reminderEngine, scope)
 
     val secrets = SecretStore(app)

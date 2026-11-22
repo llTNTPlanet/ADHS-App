@@ -18,15 +18,36 @@ import androidx.core.app.NotificationManagerCompat
 import de.lltntplanet.adhsapp.MainActivity
 import de.lltntplanet.adhsapp.R
 import de.lltntplanet.adhsapp.data.settings.AppSettings
+import de.lltntplanet.adhsapp.shared.RingTarget
 import de.lltntplanet.adhsapp.util.Permissions
+import de.lltntplanet.adhsapp.watch.WatchLink
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 
 /**
  * Zeigt Erinnerungen an:
  * - als Benachrichtigung mit Full-Screen-Intent → bei gesperrtem/ausgeschaltetem Bildschirm erscheint
  *   die Erinnerung sofort im Vollbild (wie ein Wecker),
- * - bei entsperrtem Handy zusätzlich direkt im Vollbild, wenn "Über anderen Apps anzeigen" erlaubt ist.
+ * - bei entsperrtem Handy zusätzlich direkt im Vollbild, wenn "Über anderen Apps anzeigen" erlaubt ist,
+ * - nur als stille Benachrichtigung, wenn die Uhr bestätigt hat, dass sie klingelt.
  */
-class ReminderNotifier(private val context: Context) {
+class ReminderNotifier(
+    private val context: Context,
+    /** Verbindung zur Uhr: Wird eine Erinnerung am Handy entfernt, verschwindet sie auch dort. */
+    private val watch: WatchLink,
+    /** Das eingestellte Klingel-Ziel, ohne Warten. Bei „Nur Handy“ erfährt die Uhr nichts. */
+    private val ringTarget: () -> RingTarget,
+) {
+    private val _removed = MutableSharedFlow<String>(extraBufferCapacity = 32, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /**
+     * Schlüssel der ursprünglichen Erinnerung (originKey), sobald sie am Handy entfernt wurde – per Knopf in der
+     * Benachrichtigung, auf der Uhr oder vom Medikamentenspender. Ein offenes Vollbild schließt sie dann und hört
+     * auf zu klingeln.
+     */
+    val removed: SharedFlow<String> = _removed.asSharedFlow()
 
     fun createChannels() {
         val nm = context.getSystemService(NotificationManager::class.java) ?: return
@@ -52,43 +73,65 @@ class ReminderNotifier(private val context: Context) {
             context.getString(R.string.channel_meals_name),
             NotificationManager.IMPORTANCE_DEFAULT,
         ).apply { description = context.getString(R.string.channel_meals_description) }
+        // Die Uhr klingelt schon: am Handy nur still anzeigen (kein Ton, keine Vibration, kein Aufpoppen).
+        val watchRings = NotificationChannel(
+            CHANNEL_WATCH,
+            context.getString(R.string.channel_watch_name),
+            NotificationManager.IMPORTANCE_LOW,
+        ).apply {
+            description = context.getString(R.string.channel_watch_description)
+            lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+        }
         val info = NotificationChannel(
             CHANNEL_INFO,
             context.getString(R.string.channel_info_name),
             NotificationManager.IMPORTANCE_LOW,
         ).apply { description = context.getString(R.string.channel_info_description) }
-        nm.createNotificationChannels(listOf(alerts, meals, info))
+        nm.createNotificationChannels(listOf(alerts, meals, watchRings, info))
     }
 
+    /**
+     * Zeigt die fälligen Erinnerungen am Handy.
+     *
+     * [ring] = false heißt: Die Uhr hat bestätigt, dass sie klingelt. Das Handy bleibt dann still und zeigt je
+     * Erinnerung nur eine stille Benachrichtigung mit denselben Knöpfen – ohne Vollbild, Ton und Vibration.
+     *
+     * [localOnly] = true heißt: Die Benachrichtigungen werden nicht zusätzlich vom System auf die Uhr gespiegelt
+     * (die Uhr-App zeigt sie selbst, oder die Uhr soll still bleiben).
+     */
     @SuppressLint("MissingPermission")
-    fun show(all: List<Reminder>, settings: AppSettings) {
+    fun show(all: List<Reminder>, settings: AppSettings, ring: Boolean = true, localOnly: Boolean = false) {
         if (all.isEmpty()) return
         val nm = NotificationManagerCompat.from(context)
         val canNotify = Permissions.notificationsGranted(context)
         // Stille Erinnerungen (Mahlzeit eintragen) nur als normale Benachrichtigung – nie Vollbild oder Klingeln.
+        // Die Uhr-App bekommt sie nie; nur bei „Nur Handy“ spiegelt sie auch das System nicht auf die Uhr.
         val (quiet, reminders) = all.partition { it.kind.isQuiet }
-        if (canNotify) quiet.forEach { nm.notify(it.notificationId, quietNotification(it)) }
+        val quietLocalOnly = settings.ringTarget == RingTarget.PHONE
+        if (canNotify) quiet.forEach { nm.notify(it.notificationId, quietNotification(it, quietLocalOnly)) }
         if (reminders.isEmpty()) return
         if (canNotify) {
             reminders.forEachIndexed { index, r ->
-                val builder = NotificationCompat.Builder(context, CHANNEL_ALERTS)
+                val builder = NotificationCompat.Builder(context, if (ring) CHANNEL_ALERTS else CHANNEL_WATCH)
                     .setSmallIcon(R.drawable.ic_notification)
                     .setContentTitle(ReminderText.notificationTitle(r))
                     .setContentText(ReminderText.subtitle(r))
                     .setStyle(NotificationCompat.BigTextStyle().bigText(listOfNotNull(ReminderText.subtitle(r), r.detail).joinToString("\n")))
-                    .setCategory(NotificationCompat.CATEGORY_ALARM)
-                    .setPriority(NotificationCompat.PRIORITY_MAX)
+                    .setCategory(if (ring) NotificationCompat.CATEGORY_ALARM else NotificationCompat.CATEGORY_REMINDER)
+                    .setPriority(if (ring) NotificationCompat.PRIORITY_MAX else NotificationCompat.PRIORITY_LOW)
                     .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                     .setAutoCancel(true)
                     .setColor(r.color ?: DEFAULT_COLOR)
                     .setWhen(r.targetTime ?: r.triggerAt)
                     .setShowWhen(true)
-                    .setContentIntent(activityIntent(listOf(r), r.notificationId))
+                    .setLocalOnly(localOnly || !ring)
+                    // Antippen der stillen Benachrichtigung öffnet das Vollbild, ohne dass das Handy klingelt.
+                    .setContentIntent(activityIntent(listOf(r), r.notificationId, silent = !ring))
                     .addExtras(Bundle().apply { putString(EXTRA_ORIGIN_KEY, r.originKey ?: r.key) })
                     .addAction(0, "10 Min. später", ReminderActionReceiver.pendingIntent(context, ReminderActionReceiver.ACTION_SNOOZE, r, 10))
-                if ((r.kind == ReminderKind.TASK || r.kind.isRoutine) && r.refId != null) {
-                    val label = if (r.kind == ReminderKind.MEDICATION) "Genommen" else "Erledigt"
-                    builder.addAction(0, label, ReminderActionReceiver.pendingIntent(context, ReminderActionReceiver.ACTION_DONE, r))
+                if (!ring) builder.setSubText("Klingelt auf der Uhr")
+                if (ReminderButtons.canDone(r)) {
+                    builder.addAction(0, ReminderButtons.doneLabel(r), ReminderActionReceiver.pendingIntent(context, ReminderActionReceiver.ACTION_DONE, r))
                 }
                 if (r.kind.isCheckup && r.refId != null) {
                     builder.addAction(0, "Jetzt ausfüllen", checkupIntent(r))
@@ -97,10 +140,12 @@ class ReminderNotifier(private val context: Context) {
                     builder.addAction(0, "Keine weiteren", ReminderActionReceiver.pendingIntent(context, ReminderActionReceiver.ACTION_MUTE, r))
                 }
                 builder.addAction(0, "OK", ReminderActionReceiver.pendingIntent(context, ReminderActionReceiver.ACTION_DISMISS, r))
-                if (index == 0) builder.setFullScreenIntent(activityIntent(reminders, FULL_SCREEN_REQUEST), true)
+                if (ring && index == 0) builder.setFullScreenIntent(activityIntent(reminders, FULL_SCREEN_REQUEST), true)
                 nm.notify(r.notificationId, builder.build())
             }
         }
+        // Die Uhr klingelt: Das Handy bleibt still und startet kein Vollbild.
+        if (!ring) return
         // Entsperrt und in Benutzung: Full-Screen-Intents werden vom System nur als Banner gezeigt.
         // Mit "Über anderen Apps anzeigen" darf die App das Vollbild selbst starten.
         val unlockedAndOn = isInteractive() && !isLocked()
@@ -114,7 +159,7 @@ class ReminderNotifier(private val context: Context) {
     }
 
     /** Benachrichtigung „Mahlzeit eintragen“ mit den Knöpfen „Per Foto“ und „Per Chat“. */
-    private fun quietNotification(r: Reminder): android.app.Notification =
+    private fun quietNotification(r: Reminder, localOnly: Boolean): android.app.Notification =
         NotificationCompat.Builder(context, CHANNEL_MEALS)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(ReminderText.notificationTitle(r))
@@ -127,6 +172,7 @@ class ReminderNotifier(private val context: Context) {
             .setColor(r.color ?: DEFAULT_COLOR)
             .setWhen(r.triggerAt)
             .setShowWhen(true)
+            .setLocalOnly(localOnly)
             .setContentIntent(nutritionIntent(r, null))
             .addAction(0, "Per Foto", nutritionIntent(r, MainActivity.NUTRITION_ACTION_PHOTO))
             .addAction(0, "Per Chat", nutritionIntent(r, MainActivity.NUTRITION_ACTION_CHAT))
@@ -158,26 +204,39 @@ class ReminderNotifier(private val context: Context) {
         )
     }
 
+    /**
+     * Die Erinnerung ist bestätigt (Knopf, Vollbild oder Uhr): Benachrichtigung entfernen. Ein offenes Vollbild und
+     * die Uhr erfahren davon und räumen sie ebenfalls weg.
+     */
     fun cancel(reminder: Reminder) {
         NotificationManagerCompat.from(context).cancel(reminder.notificationId)
+        // Stille Erinnerungen (Mahlzeit) kennt die Uhr-App nicht.
+        announceRemoved(reminder.originKey ?: reminder.key, tellWatch = !reminder.kind.isQuiet)
     }
 
     /**
      * Benachrichtigung zu einem Erinnerungs-Schlüssel entfernen (z. B. „rt:…“, wenn der Spender die Einnahme meldet) –
-     * auch eine schon angezeigte geschlummerte Wiederholung davon.
+     * auch eine schon angezeigte geschlummerte Wiederholung davon. Vollbild und Uhr räumen sie ebenfalls weg.
      */
     fun cancelKey(key: String) {
         val nm = NotificationManagerCompat.from(context)
         nm.cancel(key.hashCode())
-        val active = runCatching { context.getSystemService(NotificationManager::class.java)?.activeNotifications }.getOrNull() ?: return
-        active.filter { it.notification.extras.getString(EXTRA_ORIGIN_KEY) == key }.forEach { nm.cancel(it.tag, it.id) }
+        val active = runCatching { context.getSystemService(NotificationManager::class.java)?.activeNotifications }.getOrNull()
+        active?.filter { it.notification.extras.getString(EXTRA_ORIGIN_KEY) == key }?.forEach { nm.cancel(it.tag, it.id) }
+        announceRemoved(key, tellWatch = true)
     }
 
-    private fun activityIntent(reminders: List<Reminder>, requestCode: Int): PendingIntent =
+    /** Sagt Bescheid, dass die Erinnerung weg ist: einem offenen Vollbild und – außer bei „Nur Handy“ – der Uhr. */
+    private fun announceRemoved(originKey: String, tellWatch: Boolean) {
+        _removed.tryEmit(originKey)
+        if (tellWatch && ringTarget() != RingTarget.PHONE) watch.cancel(listOf(originKey))
+    }
+
+    private fun activityIntent(reminders: List<Reminder>, requestCode: Int, silent: Boolean = false): PendingIntent =
         PendingIntent.getActivity(
             context,
             requestCode,
-            ReminderActivity.intent(context, reminders),
+            ReminderActivity.intent(context, reminders, silent),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
@@ -188,6 +247,8 @@ class ReminderNotifier(private val context: Context) {
     companion object {
         private const val TAG = "ReminderNotifier"
         const val CHANNEL_ALERTS = "reminders_fullscreen"
+        /** Stiller Kanal: Die Uhr klingelt, das Handy zeigt die Erinnerung nur an. */
+        const val CHANNEL_WATCH = "reminders_watch"
         const val CHANNEL_MEALS = "meals"
         const val CHANNEL_INFO = "info"
         private const val FULL_SCREEN_REQUEST = 4711

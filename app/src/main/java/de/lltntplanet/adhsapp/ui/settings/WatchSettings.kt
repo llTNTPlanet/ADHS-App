@@ -43,12 +43,13 @@ fun WatchSettingsSection(s: AppSettings, update: ((AppSettings) -> AppSettings) 
     val container = appContainer()
     val context = LocalContext.current
     val status by container.watch.status.collectAsStateWithLifecycle()
+    // Die Einstellungen müssen auch dann offen bleiben, wenn die Verbindung zur Uhr hakt – deshalb runCatching.
     LifecycleResumeEffect(Unit) {
-        container.watch.refreshStatus()
+        runCatching { container.watch.refreshStatus() }
         onPauseOrDispose { }
     }
     // Die Übersicht enthält die sichtbaren Seiten und die Klingel-Auswahl: nach dem Speichern neu an die Uhr geben.
-    LaunchedEffect(s.watchHiddenPages, s.ringTarget) { container.watchSync.requestSync() }
+    LaunchedEffect(s.watchHiddenPages, s.ringTarget) { runCatching { container.watchSync.requestSync() } }
     val text = watchStatusText(status, s.ringTarget) { at ->
         "${TimeFormat.relativeDay(Dates.toLocalDate(at))} ${TimeFormat.time(at)}"
     }
@@ -73,7 +74,7 @@ fun WatchSettingsSection(s: AppSettings, update: ((AppSettings) -> AppSettings) 
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),
         )
-        TextButton(onClick = { container.watchSync.syncNow() }) { Text("Übersicht jetzt senden") }
+        TextButton(onClick = { runCatching { container.watchSync.syncNow() } }) { Text("Übersicht jetzt senden") }
     }
 
     Label("Wo sollen Erinnerungen klingeln?")
@@ -112,7 +113,7 @@ fun WatchSettingsSection(s: AppSettings, update: ((AppSettings) -> AppSettings) 
 
     SwitchSetting(
         "Ton auf der Uhr",
-        "Die Uhr vibriert immer. Ton kommt dazu – aber nur, wenn die Uhr einen Lautsprecher hat.",
+        "Zusätzlich zur Vibration ein Weckton – nur, wenn die Uhr einen Lautsprecher hat.",
         s.watchSound,
     ) { v -> update { it.copy(watchSound = v) } }
 
