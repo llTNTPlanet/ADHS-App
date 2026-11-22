@@ -22,8 +22,9 @@ android {
     defaultConfig {
         // Muss mit der Handy-App übereinstimmen, sonst finden sich die beiden nicht.
         applicationId = "de.lltntplanet.adhsapp"
-        // Wear OS 3 (Android 11) und neuer; die Pixel Watch 4 läuft mit Wear OS 6 (Android 16).
-        minSdk = 30
+        // Ab Wear OS 5 (Android 14): spart Sonderwege für ältere Uhren. Die Pixel Watch 4 läuft mit Wear OS 6
+        // (Android 16).
+        minSdk = 34
         targetSdk = 36
         versionCode = ciVersionCode ?: 1
         versionName = ciVersionName ?: "0.1.0-dev"
@@ -83,12 +84,16 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    // Gleiche Navigation-Version wie die Handy-App (sonst käme über Wear Compose eine alte 2.6 herein)
+    implementation(libs.androidx.navigation.compose)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.foundation)
+    // Nur die Grundsymbole; material-icons-extended wäre ohne R8 viel zu groß für die Uhr
+    implementation(libs.androidx.compose.material.icons.core)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     // Compose für Wear OS (Material 3)

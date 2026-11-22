@@ -15,14 +15,13 @@ class RingRoutingTest {
     }
 
     @Test
-    fun bothRingsOnThePhoneImmediatelyWhateverTheWatchSays() {
-        assertFalse(RingRouting.waitsForWatch(RingTarget.BOTH))
+    fun bothRingsOnThePhoneWhateverTheWatchSays() {
+        assertFalse(RingRouting.onlyIfWorn(RingTarget.BOTH))
         WatchOutcome.entries.forEach { assertTrue(it.name, RingRouting.phoneRings(RingTarget.BOTH, it)) }
     }
 
     @Test
     fun watchOnlyKeepsThePhoneQuietOnlyWhenTheWatchConfirmed() {
-        assertTrue(RingRouting.waitsForWatch(RingTarget.WATCH))
         assertFalse(RingRouting.onlyIfWorn(RingTarget.WATCH))
         assertFalse(RingRouting.phoneRings(RingTarget.WATCH, WatchOutcome.SHOWN))
         // Nie eine Erinnerung verlieren: ohne Bestätigung der Uhr klingelt das Handy.
@@ -33,8 +32,8 @@ class RingRoutingTest {
 
     @Test
     fun wornModeFallsBackToThePhone() {
-        assertTrue(RingRouting.waitsForWatch(RingTarget.WATCH_IF_WORN))
         assertTrue(RingRouting.onlyIfWorn(RingTarget.WATCH_IF_WORN))
+        assertTrue(RingRouting.ackTimeoutMillis(RingTarget.WATCH_IF_WORN) > RingRouting.ackTimeoutMillis(RingTarget.WATCH))
         assertFalse(RingRouting.phoneRings(RingTarget.WATCH_IF_WORN, WatchOutcome.SHOWN))
         assertTrue(RingRouting.phoneRings(RingTarget.WATCH_IF_WORN, WatchOutcome.NOT_WORN))
         assertTrue(RingRouting.phoneRings(RingTarget.WATCH_IF_WORN, WatchOutcome.UNREACHABLE))

@@ -51,6 +51,18 @@ class WatchProtocolTest {
     }
 
     @Test
+    fun staleRequestsAndRepliesAreRecognised() {
+        val request = RingRequest(requestId = "r", sentAt = 1_000, reminders = emptyList())
+        assertFalse(request.isStale(now = 1_000 + RingRequest.STALE_MILLIS))
+        assertTrue(request.isStale(now = 1_001 + RingRequest.STALE_MILLIS))
+
+        assertTrue(WatchReply.isOk(WatchReply.OK))
+        assertFalse(WatchReply.isOk(WatchReply.FAILED))
+        assertFalse(WatchReply.isOk(null))
+        assertFalse(WatchReply.isOk(byteArrayOf()))
+    }
+
+    @Test
     fun visiblePagesKeepOrderAndIgnoreUnknownIds() {
         val snapshot = WatchSnapshot(pages = listOf("nutrition", "calendar", "brand-new-page"))
         assertEquals(listOf(WatchPage.CALENDAR, WatchPage.NUTRITION), WatchSnapshotLogic.visiblePages(snapshot))

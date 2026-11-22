@@ -6,7 +6,11 @@ import kotlinx.serialization.json.Json
 /**
  * Das Protokoll zwischen Handy-App und Uhr-App über den Wearable Data Layer.
  *
- * - Nachrichten (MessageClient) sind flüchtig: Erinnerungen, Antworten, Knöpfe.
+ * - Anfragen (MessageClient.sendRequest → WearableListenerService.onRequest) haben eine Antwort: Erinnerung
+ *   anzeigen ([WatchPaths.RING] → [RingAck]) und Knöpfe der Uhr ([WatchPaths.REMINDER_ACTION],
+ *   [WatchPaths.ITEM_ACTION] → [WatchReply]). Der Absender weiß danach sicher, ob es angekommen ist.
+ * - Nachrichten (MessageClient.sendMessage) sind flüchtig und ohne Antwort: [WatchPaths.CANCEL],
+ *   [WatchPaths.SYNC_REQUEST].
  * - Datenelemente (DataClient) bleiben gespeichert und werden nachgeliefert: die Übersicht für die Uhr und
  *   der Zustand der Uhr-App.
  *
@@ -29,19 +33,16 @@ object WatchPaths {
     /** Datenelement Uhr → Handy: Zustand der Uhr-App ([WatchInfo]). */
     const val WATCH_INFO = "/adhs/watch-info"
 
-    /** Nachricht Handy → Uhr: Erinnerungen jetzt anzeigen ([RingRequest]). */
+    /** Anfrage Handy → Uhr: Erinnerungen jetzt anzeigen ([RingRequest]); Antwort: [RingAck]. */
     const val RING = "/adhs/ring"
-
-    /** Nachricht Uhr → Handy: Antwort auf [RING] ([RingAck]). */
-    const val RING_ACK = "/adhs/ring-ack"
 
     /** Nachricht Handy → Uhr: Erinnerungen wieder entfernen ([CancelRequest]). */
     const val CANCEL = "/adhs/cancel"
 
-    /** Nachricht Uhr → Handy: Knopf in einer Erinnerung gedrückt ([ReminderAction]). */
+    /** Anfrage Uhr → Handy: Knopf in einer Erinnerung gedrückt ([ReminderAction]); Antwort: [WatchReply]. */
     const val REMINDER_ACTION = "/adhs/reminder-action"
 
-    /** Nachricht Uhr → Handy: Aufgabe oder Routine abhaken ([ItemAction]). */
+    /** Anfrage Uhr → Handy: Aufgabe oder Routine abhaken ([ItemAction]); Antwort: [WatchReply]. */
     const val ITEM_ACTION = "/adhs/item-action"
 
     /** Nachricht Uhr → Handy: Übersicht bitte neu schicken (ohne Inhalt). */
@@ -50,6 +51,14 @@ object WatchPaths {
 
 /** Wird erhöht, wenn sich das Protokoll unverträglich ändert. */
 const val WATCH_PROTOCOL_VERSION = 1
+
+/** Antwort des Handys auf eine Anfrage der Uhr: ein Byte, 1 = ausgeführt. */
+object WatchReply {
+    val OK: ByteArray get() = byteArrayOf(1)
+    val FAILED: ByteArray get() = byteArrayOf(0)
+
+    fun isOk(reply: ByteArray?): Boolean = reply != null && reply.size == 1 && reply[0] == 1.toByte()
+}
 
 val WatchJson = Json {
     ignoreUnknownKeys = true
@@ -104,7 +113,17 @@ data class RingRequest(
     /** Wie lange höchstens geklingelt wird. */
     val ringSeconds: Int = 60,
     val version: Int = WATCH_PROTOCOL_VERSION,
-)
+) {
+    /**
+     * Kommt die Anfrage zu spät an (Verbindung hing)? Dann hat das Handy längst selbst geklingelt und die Uhr
+     * zeigt nichts mehr an.
+     */
+    fun isStale(now: Long): Boolean = now - sentAt > STALE_MILLIS
+
+    companion object {
+        const val STALE_MILLIS = 60_000L
+    }
+}
 
 /** Uhr → Handy: Antwort auf [RingRequest]. */
 @Serializable
@@ -174,10 +193,13 @@ data class WatchInfo(
     /** Gerätename, z. B. „Google Pixel Watch 4“. */
     val model: String = "",
     val updatedAt: Long = 0,
-    /** Dürfen auf der Uhr Benachrichtigungen gezeigt werden? */
+    /** Dürfen auf der Uhr Benachrichtigungen gezeigt werden? (Ohne sie kann die Uhr nicht klingeln.) */
     val notificationsAllowed: Boolean = true,
-    /** Darf die Uhr-App Erinnerungen im Vollbild zeigen? */
-    val fullScreenAllowed: Boolean = true,
+    /**
+     * Darf die Uhr-App ihr Vollbild von selbst öffnen („Über anderen Apps anzeigen“, auf der Uhr nur per adb
+     * einstellbar)? Ohne das klingelt die Uhr trotzdem; das Vollbild erscheint dann erst beim Antippen.
+     */
+    val overlayAllowed: Boolean = false,
     /** Kann die Uhr feststellen, ob sie getragen wird? */
     val wornDetection: Boolean = true,
 )

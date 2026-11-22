@@ -50,10 +50,10 @@ object RingRouting {
     fun onlyIfWorn(target: RingTarget): Boolean = target == RingTarget.WATCH_IF_WORN
 
     /**
-     * Muss das Handy erst die Antwort der Uhr abwarten, bevor es entscheidet? Bei „Handy und Uhr“ klingelt das
-     * Handy sofort, die Uhr wird nebenher benachrichtigt.
+     * Wie lange das Handy höchstens auf die Antwort der Uhr wartet. Mit Trage-Prüfung etwas länger, weil der
+     * Sensor der Uhr bis zu zwei Sekunden braucht. Ist gar keine Uhr erreichbar, wartet das Handy nicht.
      */
-    fun waitsForWatch(target: RingTarget): Boolean = target == RingTarget.WATCH || target == RingTarget.WATCH_IF_WORN
+    fun ackTimeoutMillis(target: RingTarget): Long = if (onlyIfWorn(target)) 5_000L else 4_000L
 
     /**
      * Klingelt das Handy (Vollbild, Ton, Vibration)? Grundsatz: Eine Erinnerung darf nie verloren gehen – nur
