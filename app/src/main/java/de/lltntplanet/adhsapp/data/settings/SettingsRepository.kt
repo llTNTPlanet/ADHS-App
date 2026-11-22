@@ -13,6 +13,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import de.lltntplanet.adhsapp.data.nutrition.FoodVisionProvider
+import de.lltntplanet.adhsapp.shared.RingTarget
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -75,6 +76,12 @@ data class AppSettings(
     val ringSeconds: Int = 60,
     /** Wecker-Modus: setAlarmClock() – maximal zuverlässig, zeigt aber ein Wecker-Symbol. */
     val alarmClockMode: Boolean = false,
+    /** Wo Erinnerungen klingeln: Handy, Uhr (Wear OS), beide – oder die Uhr nur, wenn sie getragen wird. */
+    val ringTarget: RingTarget = RingTarget.DEFAULT,
+    /** Unterseiten (WatchPage.id), die auf der Uhr NICHT angezeigt werden. Leer = alle Seiten zeigen. */
+    val watchHiddenPages: Set<String> = emptySet(),
+    /** Auf der Uhr zusätzlich zur Vibration einen Weckton abspielen. */
+    val watchSound: Boolean = false,
     val stepGoal: Int = 8000,
     /** Ernährungsprofil für den Grundumsatz (Mifflin-St-Jeor). */
     val sex: Sex? = null,
@@ -137,6 +144,9 @@ class SettingsRepository(private val context: Context) {
         val vibrate = booleanPreferencesKey("vibrate")
         val ringSeconds = intPreferencesKey("ring_seconds")
         val alarmClockMode = booleanPreferencesKey("alarm_clock_mode")
+        val ringTarget = stringPreferencesKey("ring_target")
+        val watchHiddenPages = stringSetPreferencesKey("watch_hidden_pages")
+        val watchSound = booleanPreferencesKey("watch_sound")
         val stepGoal = intPreferencesKey("step_goal")
         val sex = stringPreferencesKey("sex")
         val birthYear = intPreferencesKey("birth_year")
@@ -198,6 +208,9 @@ class SettingsRepository(private val context: Context) {
             vibrate = this[Keys.vibrate] ?: d.vibrate,
             ringSeconds = this[Keys.ringSeconds] ?: d.ringSeconds,
             alarmClockMode = this[Keys.alarmClockMode] ?: d.alarmClockMode,
+            ringTarget = this[Keys.ringTarget]?.let { RingTarget.fromName(it) } ?: d.ringTarget,
+            watchHiddenPages = this[Keys.watchHiddenPages] ?: d.watchHiddenPages,
+            watchSound = this[Keys.watchSound] ?: d.watchSound,
             stepGoal = this[Keys.stepGoal] ?: d.stepGoal,
             sex = this[Keys.sex]?.let { v -> Sex.entries.find { it.name == v } },
             birthYear = this[Keys.birthYear],
@@ -257,6 +270,9 @@ class SettingsRepository(private val context: Context) {
         this[Keys.vibrate] = s.vibrate
         this[Keys.ringSeconds] = s.ringSeconds
         this[Keys.alarmClockMode] = s.alarmClockMode
+        this[Keys.ringTarget] = s.ringTarget.name
+        this[Keys.watchHiddenPages] = s.watchHiddenPages
+        this[Keys.watchSound] = s.watchSound
         this[Keys.stepGoal] = s.stepGoal
         if (s.sex != null) this[Keys.sex] = s.sex.name else remove(Keys.sex)
         if (s.birthYear != null) this[Keys.birthYear] = s.birthYear else remove(Keys.birthYear)

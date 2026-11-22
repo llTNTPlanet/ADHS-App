@@ -92,6 +92,8 @@ ksp {
 }
 
 dependencies {
+    // Gemeinsames Datenformat mit der Uhr-App
+    implementation(project(":shared"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
@@ -118,6 +120,8 @@ dependencies {
     implementation(libs.androidx.health.connect.client)
 
     implementation(libs.play.services.auth)
+    // Verbindung zur Uhr-App (Wear OS Data Layer)
+    implementation(libs.play.services.wearable)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
