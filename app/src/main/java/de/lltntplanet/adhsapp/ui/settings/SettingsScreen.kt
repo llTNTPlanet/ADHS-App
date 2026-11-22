@@ -392,6 +392,9 @@ fun SettingsScreen(onBack: () -> Unit, onOpenSetup: () -> Unit) {
                 s.alarmClockMode,
             ) { v -> vm.update { it.copy(alarmClockMode = v) } }
 
+            // Uhr (Wear OS): wo Erinnerungen klingeln und was die Uhr-App zeigt
+            WatchSettingsSection(s, vm::update)
+
             // Medikamentenspender (Memio Go)
             DispenserSettingsSection(s, vm::update)
 

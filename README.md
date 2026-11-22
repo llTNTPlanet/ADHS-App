@@ -96,6 +96,11 @@ Weitere Bilder: [Einrichtung](docs/screenshots/01-einrichtung.png), [Essen](docs
 - Welche Seiten unten als Symbol stehen, wählst du selbst (Einstellungen → Untere Leiste oder „Weitere → Leiste anpassen“)
 - Alle nicht gewählten Seiten liegen unter dem Symbol „Weitere“ in einer kurzen Liste
 
+**Uhr-App für Wear OS (Pixel Watch)**
+- Erinnerungen klingeln auf Wunsch auf der Uhr: nur Handy, nur Uhr, beide – oder „Uhr, wenn ich sie trage – sonst Handy“
+- Kompakte Übersicht von „Heute“ und den Unterseiten direkt am Handgelenk
+- Installation, Einstellungen und Grenzen: siehe [Uhr-App (Wear OS / Pixel Watch)](#uhr-app-wear-os--pixel-watch)
+
 **App-Updates direkt aus GitHub**
 - Neue Versionen erscheinen nach jedem Merge auf `main` automatisch als GitHub-Release
 - Die App meldet ein Update sofort beim Öffnen (Dialog) bzw. im Hintergrund (Benachrichtigung)
@@ -145,7 +150,7 @@ Testversionen aus Pull Requests gibt es unter **Actions → Android → Artefakt
 Android Studio öffnen → Projekt öffnen → ▶ Run. Oder im Terminal:
 
 ```bash
-./gradlew assembleDebug        # APK: app/build/outputs/apk/debug/app-debug.apk
+./gradlew assembleDebug        # APK: app/build/outputs/apk/debug/app-debug.apk (Uhr-App: wear/build/outputs/apk/debug/wear-debug.apk)
 ./gradlew testDebugUnitTest    # Unit-Tests
 ```
 
@@ -218,6 +223,10 @@ Hintergrund (alle 4 Stunden) nach einer neueren Version:
   Rückfrage. Sonst kommt eine Benachrichtigung zum Bestätigen.
 - Vor der Installation prüft die App Prüfsumme, Paketname, Versionsnummer und Signatur.
 
+An jedem Release hängen zwei Dateien: `adhs-app.apk` (Handy) und `adhs-watch.zip` (die
+[Uhr-App](#uhr-app-wear-os--pixel-watch)). Das Handy aktualisiert nur sich selbst und nimmt dafür immer
+`adhs-app.apk` – die Uhr-App installierst du von Hand.
+
 ### Einmalige Einrichtung
 
 1. **Signaturschlüssel als Secrets:** Im Repository *Settings → Secrets and variables → Actions →
@@ -244,6 +253,107 @@ Hintergrund (alle 4 Stunden) nach einer neueren Version:
    eintragen (zusätzlicher Android-Client oder SHA-1 ersetzen). Er steht im Log jedes Release-Laufs im
    Schritt „Signatur prüfen“.
 
+## Uhr-App (Wear OS / Pixel Watch)
+
+Zur Handy-App gibt es eine kleine Begleit-App für Wear-OS-Uhren – gebaut für die Pixel Watch 4.
+
+### Was sie kann
+
+- **Erinnerungen am Handgelenk:** Die Uhr vibriert (auf Wunsch mit Ton) und zeigt die Erinnerung mit den Knöpfen
+  „OK“, „10 Min. später“, „Genommen“/„Erledigt“ und „Keine weiteren“. Bestätigst du auf einem Gerät, hört das
+  andere auf.
+- **Du bestimmst, wo es klingelt:** nur Handy, nur Uhr, Handy und Uhr – oder „Uhr, wenn ich sie trage – sonst Handy“.
+- **Übersicht:** die Startseite „Heute“ in kompakt, dazu auf Wunsch Kalender, Aufgaben, Routinen, Geburtstage,
+  Gesundheit und Essen. Aufgaben und Routinen lassen sich auf der Uhr abhaken.
+- **Nichts geht verloren:** Ist die Uhr nicht erreichbar oder antwortet sie nicht, klingelt das Handy wie gewohnt.
+
+### Voraussetzungen
+
+- Uhr mit **Wear OS 5 oder neuer**, mit deinem Handy gekoppelt
+- Handy-App und Uhr-App aus einem **GitHub-Release** – beim ersten Mal am besten aus demselben. Beide müssen mit
+  demselben Schlüssel signiert sein, sonst finden sie sich nicht. Testversionen aus *Actions*
+  (`adhs-app-debug-apk`, `adhs-watch-debug-apk`) sind anders signiert: Sie passen zueinander, aber nicht zu einer
+  Release-Version.
+- Für die Installation: ein PC mit `adb` (Android SDK Platform-Tools, Version 30 oder neuer); PC und Uhr im selben WLAN
+
+### Installation (Debugging über WLAN)
+
+Die Uhr-App gibt es nicht im Play Store. Du spielst sie per `adb` auf die Uhr:
+
+1. **Entwickleroptionen einschalten** – auf der Uhr: *Einstellungen → System → Info → Versionen*, dann 7× auf
+   **Build-Nummer** tippen.
+2. **Debugging einschalten** – auf der Uhr: *Einstellungen → Entwickleroptionen* → **ADB-Debugging** an, dann
+   **Debugging über WLAN** an.
+3. **Koppeln starten** – dort **Neues Gerät koppeln** wählen. Die Uhr zeigt einen Kopplungscode und `IP:PORT`.
+4. **Uhr-App holen** – am PC unter **Releases** die neueste Version öffnen, `adhs-watch.zip` herunterladen und
+   entpacken. Darin liegt `adhs-watch.apk`.
+5. **Koppeln, verbinden, installieren** – am PC im Ordner mit der `adhs-watch.apk`:
+
+   ```bash
+   adb pair IP:PORT                 # IP:PORT aus „Neues Gerät koppeln“, danach den Kopplungscode eintippen
+   adb connect IP:PORT              # IP:PORT von der Seite „Debugging über WLAN“ (meist ein anderer Port)
+   adb install -r adhs-watch.apk    # -r ersetzt eine vorhandene Version, die Daten bleiben
+   ```
+6. **App einmal öffnen** – die App auf der Uhr starten und **Benachrichtigungen erlauben**. Ohne diese Erlaubnis
+   kann die Uhr nicht klingeln (dann klingelt das Handy).
+7. **Aufräumen** – „Debugging über WLAN“ auf der Uhr wieder ausschalten; es kostet Akku.
+
+Wenn etwas hakt:
+- `adb devices` zeigt, ob die Uhr verbunden ist (`IP:PORT  device`). Hängt auch dein Handy an adb, nenne die Uhr
+  ausdrücklich: `adb -s IP:PORT install -r adhs-watch.apk`.
+- Der Port ändert sich, wenn du „Debugging über WLAN“ aus- und einschaltest oder das WLAN wechselst. Dann
+  `adb connect` mit dem neuen Port wiederholen; das Koppeln bleibt in der Regel gültig.
+- Gast-WLANs trennen Geräte oft voneinander. Nimm dann dein normales WLAN oder den Hotspot deines Handys.
+- `INSTALL_FAILED_UPDATE_INCOMPATIBLE`: Auf der Uhr ist eine anders signierte Version (z. B. eine Testversion).
+  Erst dort deinstallieren – `adb -s IP:PORT uninstall de.lltntplanet.adhsapp`, unbedingt mit `-s`, sonst trifft es
+  womöglich die Handy-App – und dann noch einmal installieren.
+
+### Einstellungen am Handy
+
+Alles steht unter *Einstellungen → Uhr (Wear OS)*:
+
+- **Status** – ob die Uhr-App gefunden und verbunden ist, ihre Version und was noch fehlt (z. B. die Erlaubnis für
+  Benachrichtigungen auf der Uhr).
+- **Wo sollen Erinnerungen klingeln?**
+
+  | Auswahl | Was passiert |
+  |---|---|
+  | Nur Handy | Die Uhr bleibt still. |
+  | Nur Uhr | Die Uhr klingelt, das Handy zeigt nur eine stille Benachrichtigung. |
+  | Handy und Uhr | Beide klingeln (Vorgabe). |
+  | Uhr, wenn ich sie trage – sonst Handy | Liegt die Uhr ab oder lädt sie, klingelt das Handy. Kann die Uhr es nicht sicher erkennen, klingeln beide. |
+
+  Immer gilt: Ist die Uhr nicht erreichbar oder antwortet sie nicht, klingelt das Handy.
+- **Ton auf der Uhr** – zusätzlich zur Vibration ein Weckton, wenn die Uhr einen Lautsprecher hat.
+- **Seiten auf der Uhr** – welche Unterseiten die Uhr zeigt. Die Startseite „Heute“ ist immer dabei.
+- **Übersicht jetzt senden** – schickt die Übersicht sofort neu an die Uhr. Sonst passiert das von selbst, sobald
+  sich etwas ändert.
+- **Test in 10 s** (ganz oben unter „Status“) – läuft über die Klingel-Auswahl und testet damit auch die Uhr.
+
+### Optional: Vollbild von selbst öffnen
+
+Auf Wear OS darf eine App ihr Vollbild nur mit einer Sonder-Erlaubnis selbst öffnen. Sie lässt sich nur per `adb`
+setzen – am besten gleich nach der Installation, solange die Uhr noch verbunden ist:
+
+```bash
+adb shell appops set de.lltntplanet.adhsapp SYSTEM_ALERT_WINDOW allow
+```
+
+Dann öffnet die Uhr die Erinnerung selbst im Vollbild. Ohne den Befehl klingelt die Uhr genauso; das Vollbild
+erscheint dann, sobald du die Benachrichtigung antippst. Ob es geklappt hat, zeigt der Status am Handy
+(„Vollbild auf der Uhr: öffnet sich von selbst.“). Hängt auch dein Handy an adb, gehört wieder `-s IP:PORT` hinter `adb`.
+
+### Grenzen
+
+- Die Uhr plant nichts selbst. Das Handy sagt ihr, wann sie klingeln soll – ist das Handy aus oder außer Reichweite,
+  bleibt die Uhr still.
+- Ohne Verbindung zur Uhr klingelt immer das Handy.
+- Die stille Erinnerung „Mahlzeit eintragen“ kommt nur am Handy.
+- Checkups füllst du am Handy aus; auf der Uhr lassen sie sich nicht abhaken.
+- Die Uhr-App aktualisiert sich nicht selbst. Für eine neue Version wieder `adhs-watch.zip` aus dem Release laden und
+  per `adb install -r adhs-watch.apk` installieren (Schritte 2 bis 5; das Koppeln entfällt meist). Nötig ist das,
+  wenn der Status am Handy meldet „Handy-App und Uhr-App passen nicht zusammen“ – sonst nach Belieben.
+
 ## Datenschutz
 
 Alles bleibt auf deinem Handy. Kalender und Kontakte werden aus dem Google-Konto auf dem Gerät gelesen,
@@ -252,6 +362,8 @@ Der GitHub-Token für Updates liegt im privaten App-Speicher und ist von Geräte
 Für den Medikamentenspender liest die App nur Benachrichtigungen der Apps iDispenser, Smart Life und Tuya Smart mit
 (von den beiden letzten nur Meldungen, die den Spender oder Medikamente nennen) und speichert sie 90 Tage auf dem
 Handy. „Liste leeren“ blendet die Meldungen nur aus.
+Für die Uhr-App gehen Erinnerungen und die Übersicht (Termine, Aufgaben, Routinen, Geburtstage, Gesundheits- und
+Essenswerte) über die Wear-OS-Verbindung der Google-Play-Dienste an deine gekoppelte Uhr – auch hier ohne eigenen Server.
 
 ## Technik
 
@@ -282,14 +394,23 @@ Handy. „Liste leeren“ blendet die Meldungen nur aus.
   WorkManager periodische Jobs erst ab 15 Minuten erlaubt), beim Öffnen der App und danach alle 5 Minuten, solange sie
   sichtbar ist, sowie manuell durch Herunterziehen auf jedem Bildschirm (Pull-to-Refresh). Im Energiesparmodus (Doze)
   fasst Android Hintergrundläufe zusammen, dann vergehen auch mal 15 Minuten oder mehr.
+- Uhr-App: eigenes Modul `:wear` (Compose for Wear OS, Material 3) mit demselben Paketnamen und Schlüssel wie die
+  Handy-App; gemeinsames Datenformat im Modul `:shared`. Verbindung über den Wearable Data Layer
+  (`play-services-wearable`): Erinnerungen als Anfrage mit Antwort (`/adhs/ring`), Knöpfe der Uhr als Anfrage zurück
+  ans Handy, die Übersicht als Datenelement (`/adhs/snapshot`). Die Klingel-Weiche (`RingRouting`) lässt das Handy nur
+  dann still, wenn die Uhr ausdrücklich bestätigt hat, dass sie die Erinnerung zeigt. Geplant wird weiterhin nur am
+  Handy (`ReminderEngine`).
 
 ```
 app/src/main/java/de/lltntplanet/adhsapp/
 ├── data/          Kalender, Geburtstage, Aufgaben (Room), Einstellungen, Google-APIs, Gesundheit, Ernährung
 ├── reminders/     Planung, Alarme, Benachrichtigung, Vollbild-Activity, Hintergrund-Jobs
 ├── update/        Selbst-Update aus GitHub-Releases (Prüfung, Download, Installation)
+├── watch/         Verbindung zur Uhr-App: Klingel-Weiche, Übersicht, Status
 ├── ui/            Heute, Kalender, Aufgaben, Geburtstage, Gesundheit, Essen, Einstellungen, Einrichtung
 └── util/          Zeitformate (deutsch), Berechtigungen
+shared/            Gemeinsames Datenformat von Handy- und Uhr-App
+wear/              Uhr-App (Wear OS)
 ```
 
 Screenshots neu erzeugen (Robolectric, ohne Emulator):
@@ -303,3 +424,5 @@ Screenshots neu erzeugen (Robolectric, ohne Emulator):
 - Wiederkehrende Termine werden in der App angezeigt; ändern lassen sie sich über „In Google Kalender öffnen“.
 - Google Tasks speichert nur ein Datum, keine Uhrzeit – Uhrzeit, Erinnerung und „wichtig“ bleiben in der App.
   Wiederkehrende Aufgaben bleiben lokal, weil die Google-Tasks-API keine Wiederholungen kennt.
+- Die Uhr-App klingelt nur, solange das Handy sie erreicht, und aktualisiert sich nicht selbst – siehe
+  [Uhr-App → Grenzen](#grenzen).

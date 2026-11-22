@@ -15,6 +15,7 @@ import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.security.MessageDigest
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLException
 
@@ -187,6 +188,24 @@ class GitHubReleaseClient(
         private val VERSION_CODE = Regex("""versionCode:\s*(\d+)""")
         private val HTML_COMMENT = Regex("""<!--.*?-->""", RegexOption.DOT_MATCHES_ALL)
 
+        /** So heißt die APK der Handy-App in jedem Release (siehe .github/workflows/release.yml). */
+        private const val PHONE_APK_NAME = "adhs-app.apk"
+
+        /** Steht eines dieser Wörter im Dateinamen, gehört die APK zur Uhr-App. */
+        private val WATCH_APK_MARKERS = listOf("watch", "wear", "uhr")
+
+        /**
+         * Sucht die APK der Handy-App unter den Dateien eines Releases: zuerst genau [PHONE_APK_NAME], sonst die
+         * erste APK, deren Name nicht nach Uhr-App aussieht. Die Uhr-App hat denselben Paketnamen, denselben
+         * Schlüssel und dieselbe Versionsnummer – sie darf nie als Update auf dem Handy landen.
+         */
+        private fun phoneApk(assets: List<GitHubAsset>): GitHubAsset? =
+            assets.firstOrNull { it.name == PHONE_APK_NAME }
+                ?: assets.firstOrNull { asset ->
+                    val name = asset.name.lowercase(Locale.ROOT)
+                    name.endsWith(".apk") && WATCH_APK_MARKERS.none { it in name }
+                }
+
         /**
          * Macht aus einem Release ein [UpdateInfo], wenn es neuer als [currentVersionCode] ist.
          * Die Release-Pipeline schreibt die Versionsnummer als `<!-- versionCode: 42 -->` in den Text.
@@ -196,7 +215,7 @@ class GitHubReleaseClient(
             val body = release.body.orEmpty()
             val code = VERSION_CODE.find(body)?.groupValues?.get(1)?.toIntOrNull() ?: return null
             if (code <= currentVersionCode) return null
-            val apk = release.assets.firstOrNull { it.name.endsWith(".apk", ignoreCase = true) } ?: return null
+            val apk = phoneApk(release.assets) ?: return null
             return UpdateInfo(
                 versionCode = code,
                 versionName = release.tagName.removePrefix("v"),

@@ -75,6 +75,46 @@ class GitHubReleaseClientTest {
         assertNull(GitHubReleaseClient.toUpdate(release(digest = "md5:x"), currentVersionCode = 1)!!.sha256)
     }
 
+    /** Release mit mehreren Dateien; die Adresse jeder Datei endet auf ihren Namen. */
+    private fun releaseWith(vararg names: String) = release().copy(
+        assets = names.mapIndexed { i, name -> GitHubAsset(id = i + 1L, name = name, size = 100L + i, url = "https://api.github.com/assets/$name") },
+    )
+
+    private fun pickedApk(vararg names: String): String? =
+        GitHubReleaseClient.toUpdate(releaseWith(*names), currentVersionCode = 3)?.apkUrl?.substringAfterLast('/')
+
+    @Test
+    fun phoneApkWinsWhateverTheAssetOrder() {
+        assertEquals("adhs-app.apk", pickedApk("adhs-app.apk", "adhs-watch.apk"))
+        assertEquals("adhs-app.apk", pickedApk("adhs-watch.apk", "adhs-app.apk"))
+        assertEquals("adhs-app.apk", pickedApk("adhs-watch.zip", "wear-release.apk", "adhs-app.apk"))
+        // Der genaue Name geht vor – auch wenn davor eine andere APK ohne Uhr im Namen steht.
+        assertEquals("adhs-app.apk", pickedApk("app-release.apk", "adhs-app.apk"))
+        // Größe und Adresse stammen von der gewählten Datei, nicht von der ersten.
+        val info = GitHubReleaseClient.toUpdate(releaseWith("adhs-watch.apk", "adhs-app.apk"), currentVersionCode = 3)!!
+        assertEquals(101L, info.apkSize)
+        assertEquals("https://api.github.com/assets/adhs-app.apk", info.apkUrl)
+    }
+
+    @Test
+    fun watchApkAloneIsNeverAnUpdate() {
+        assertNull(pickedApk("adhs-watch.apk"))
+        assertNull(pickedApk("ADHS-Watch.APK"))
+        assertNull(pickedApk("adhs-app-wear.apk"))
+        assertNull(pickedApk("wear-release.apk", "Adhs-Uhr.apk"))
+        assertNull(pickedApk("adhs-watch.zip"))
+        assertNull(pickedApk())
+    }
+
+    @Test
+    fun otherPhoneApkNameStillWorksButNeverTheWatchApk() {
+        assertEquals("app-release.apk", pickedApk("app-release.apk"))
+        assertEquals("app-release.apk", pickedApk("wear-release.apk", "app-release.apk"))
+        assertEquals("ADHS-App-1.0.7.APK", pickedApk("adhs-watch.apk", "notes.txt", "ADHS-App-1.0.7.APK"))
+        // Mehrere mögliche Handy-APKs ohne den genauen Namen: die erste gewinnt.
+        assertEquals("phone.apk", pickedApk("phone.apk", "app-release.apk"))
+    }
+
     @Test
     fun latestReleaseSendsTokenOnlyWhenSet() = runTest {
         val json = """{"tag_name":"v1.0.6","body":"<!-- versionCode: 7 -->","assets":[{"id":1,"name":"adhs-app.apk","size":10,"url":"u","digest":"sha256:ff"}]}"""
