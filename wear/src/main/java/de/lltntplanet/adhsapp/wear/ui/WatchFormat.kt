@@ -2,7 +2,9 @@ package de.lltntplanet.adhsapp.wear.ui
 
 import de.lltntplanet.adhsapp.shared.WatchBirthday
 import de.lltntplanet.adhsapp.shared.WatchEvent
+import de.lltntplanet.adhsapp.shared.WatchFood
 import de.lltntplanet.adhsapp.shared.WatchNutrition
+import de.lltntplanet.adhsapp.shared.WatchPage
 import de.lltntplanet.adhsapp.shared.WatchRoutine
 import de.lltntplanet.adhsapp.shared.WatchSnapshotLogic
 import de.lltntplanet.adhsapp.shared.WatchTask
@@ -194,6 +196,30 @@ object WatchFormat {
     fun kcalLeft(nutrition: WatchNutrition): String {
         val left = nutrition.remainingKcal.toLong()
         return if (left >= 0) "${number(left)} kcal frei" else "${number(-left)} kcal drüber"
+    }
+
+    /** Was heute gegessen wurde: „750 von 2.000 kcal gegessen“ – ohne Budget nur „750 kcal gegessen“. */
+    fun kcalEaten(nutrition: WatchNutrition): String {
+        val eaten = number(nutrition.eatenKcal.toLong())
+        return if (nutrition.budgetKcal > 0) {
+            "$eaten von ${number(nutrition.budgetKcal.toLong())} kcal gegessen"
+        } else {
+            "$eaten kcal gegessen"
+        }
+    }
+
+    /** Zeile unter einem Eintrag der Seite „Essen“: „Frühstück · 320 kcal“. */
+    fun foodLine(food: WatchFood): String =
+        listOf(food.meal, "${number(food.kcal.toLong())} kcal").filter { it.isNotBlank() }.joinToString(" · ")
+
+    /** Kleines Bild zu einer Unterseite – wie am Handy stehen Emojis statt eigener Symbole. */
+    fun symbol(page: WatchPage): String = when (page) {
+        WatchPage.CALENDAR -> "📅"
+        WatchPage.TASKS -> "✅"
+        WatchPage.ROUTINES -> "💊"
+        WatchPage.BIRTHDAYS -> "🎂"
+        WatchPage.HEALTH -> "💓"
+        WatchPage.NUTRITION -> "🍴"
     }
 
     /** Wie alt die Daten sind: „Stand: 14:05“, an anderen Tagen mit Tag („Stand: Gestern 23:10“). */

@@ -40,7 +40,10 @@ data class WatchSnapshot(
     val ringTarget: String = RingTarget.DEFAULT.name,
     /** Hat das Handy Zugriff auf den Kalender? Sonst bleibt [events] leer. */
     val calendarAvailable: Boolean = true,
-    /** Termine von heute bis einschließlich übermorgen, nach Beginn sortiert. */
+    /**
+     * Termine nach Beginn sortiert: von heute bis heute + 7 Tage (höchstens 60); ist die Unterseite „Kalender“
+     * ausgeblendet, nur heute und morgen. Abgesagte und abgelehnte Termine sind nicht dabei.
+     */
     val events: List<WatchEvent> = emptyList(),
     /** Gibt es überhaupt Routinen/Medikamente? Sonst lässt die Uhr den Abschnitt weg. */
     val hasRoutines: Boolean = false,
@@ -146,7 +149,7 @@ data class WatchNutrition(
     val eatenKcal: Int = 0,
     /** Tagesbudget (Grundumsatz + Aktivität + Anpassung). */
     val budgetKcal: Int = 0,
-    /** Die letzten Einträge von heute. */
+    /** Die Einträge von heute, neueste zuerst (höchstens 20). */
     val entries: List<WatchFood> = emptyList(),
 ) {
     val remainingKcal: Int get() = budgetKcal - eatenKcal

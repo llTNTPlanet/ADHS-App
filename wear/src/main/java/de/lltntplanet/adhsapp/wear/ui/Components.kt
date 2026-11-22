@@ -179,8 +179,8 @@ internal fun TransformingLazyColumnItemScope.TaskRow(
 }
 
 /**
- * Karte mit einer Überschrift und – wenn [line] gesetzt ist – einer Zeile darunter. Mit [onClick] führt sie
- * weiter, ohne ist sie nur zum Lesen. [highlighted] hebt sie farbig hervor.
+ * Karte mit einer Überschrift und – wenn [line] gesetzt ist – einer Zeile darunter; mit [progress] (0..1) dazu
+ * ein Balken. Mit [onClick] führt sie weiter, ohne ist sie nur zum Lesen. [highlighted] hebt sie farbig hervor.
  */
 @Composable
 internal fun TransformingLazyColumnItemScope.InfoCard(
@@ -188,6 +188,7 @@ internal fun TransformingLazyColumnItemScope.InfoCard(
     spec: TransformationSpec,
     line: String? = null,
     highlighted: Boolean = false,
+    progress: Float? = null,
     onClick: (() -> Unit)? = null,
 ) {
     Card(
@@ -206,6 +207,9 @@ internal fun TransformingLazyColumnItemScope.InfoCard(
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodySmall,
             )
+        }
+        if (progress != null) {
+            ProgressBar(fraction = progress, modifier = Modifier.padding(top = 6.dp))
         }
     }
 }
@@ -283,6 +287,12 @@ internal fun ProgressBar(fraction: Float, modifier: Modifier = Modifier, color: 
         colors = ProgressIndicatorDefaults.colors(indicatorColor = color),
         strokeWidth = LinearProgressIndicatorDefaults.StrokeWidthSmall,
     )
+}
+
+/** Beschriftung eines Knopfs ohne Symbol: mittig. */
+@Composable
+internal fun CenteredLabel(text: String) {
+    Text(text = text, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
 }
 
 /** Farben einer Karte – hervorgehoben in der Farbe der App. */

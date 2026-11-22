@@ -6,6 +6,7 @@ import de.lltntplanet.adhsapp.wear.alert.AlertController
 import de.lltntplanet.adhsapp.wear.alert.WornDetector
 import de.lltntplanet.adhsapp.wear.link.PhoneLink
 import de.lltntplanet.adhsapp.wear.link.SnapshotRepository
+import de.lltntplanet.adhsapp.wear.ui.OverviewController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -49,4 +50,10 @@ class WearContainer(val app: Application) {
 
     /** Die Erinnerungen, die gerade auf der Uhr stehen. */
     val alerts = AlertController(app, phone, scope)
+
+    /**
+     * Was die Oberfläche mit der Übersicht tun kann (auffrischen, abhaken). Lebt hier und nicht im Bildschirm –
+     * so bleibt sichtbar, was gerade abgehakt wurde, auch wenn der Bildschirm neu aufgebaut wird.
+     */
+    val overview: OverviewController by lazy { OverviewController(this) }
 }

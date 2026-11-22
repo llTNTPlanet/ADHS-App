@@ -1,6 +1,7 @@
 package de.lltntplanet.adhsapp.wear.ui
 
 import de.lltntplanet.adhsapp.shared.ItemAction
+import de.lltntplanet.adhsapp.shared.WatchBirthday
 import de.lltntplanet.adhsapp.shared.WatchEvent
 import de.lltntplanet.adhsapp.shared.WatchRoutine
 import de.lltntplanet.adhsapp.shared.WatchSnapshot
@@ -14,6 +15,9 @@ object OverviewLogic {
 
     /** Älter als das? Dann bittet die Uhr das Handy um eine frische Übersicht. */
     const val SYNC_AGE_MILLIS = 10L * 60 * 1000
+
+    /** So oft prüft die sichtbare App, ob die Übersicht zu alt geworden ist. */
+    const val SYNC_CHECK_MILLIS = 5L * 60 * 1000
 
     /** So lange wartet „Aktualisieren“ auf die neue Übersicht vom Handy. */
     const val ANSWER_MILLIS = 8_000L
@@ -33,6 +37,11 @@ object OverviewLogic {
     const val NO_ANSWER = "Handy antwortet nicht"
     const val ACTION_FAILED = "Hat nicht geklappt"
 
+    private const val MINUTE_MILLIS = 60_000L
+
+    /** Kleiner Abstand hinter der vollen Minute, damit die Anzeige sicher schon in der neuen Minute rechnet. */
+    private const val TICK_MARGIN_MILLIS = 50L
+
     /** Ein Tag der Seite „Kalender“ mit seinen Terminen ([start] bis [end] in Millisekunden). */
     data class Day(val epochDay: Long, val start: Long, val end: Long, val events: List<WatchEvent>)
 
@@ -47,6 +56,9 @@ object OverviewLogic {
         val zone = WatchFormat.zone(snapshot.zoneId)
         return WatchFormat.epochDay(snapshot.generatedAt, zone) != WatchFormat.epochDay(now, zone)
     }
+
+    /** Wie lange es von [now] bis kurz nach der nächsten vollen Minute dauert – dann rechnet die Anzeige neu. */
+    fun untilNextMinute(now: Long): Long = MINUTE_MILLIS - Math.floorMod(now, MINUTE_MILLIS) + TICK_MARGIN_MILLIS
 
     /**
      * Die Übersicht mit gesetztem oder entferntem Haken an einem Vorkommen ([WatchRoutine.key]). Wie am Handy
@@ -103,6 +115,20 @@ object OverviewLogic {
      * Die sind am Handy schon auf den nächsten Termin gerückt.
      */
     fun canUncheck(task: WatchTask): Boolean = !task.repeating
+
+    /**
+     * Die kommenden Geburtstage ab heute, die nächsten zuerst – höchstens [limit]. Vergangene (aus einer alten
+     * Übersicht) fallen weg.
+     */
+    fun upcomingBirthdays(
+        birthdays: List<WatchBirthday>,
+        todayEpochDay: Long,
+        limit: Int = Int.MAX_VALUE,
+    ): List<WatchBirthday> =
+        birthdays
+            .filter { it.epochDay >= todayEpochDay }
+            .sortedWith(compareBy({ it.epochDay }, { it.name }))
+            .take(limit)
 
     /**
      * Die Tage der Seite „Kalender“: heute immer (auch ohne Termine), danach jeder Tag mit Terminen – höchstens

@@ -25,13 +25,18 @@ class ApkInstaller(private val context: Context) {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
     /**
-     * Prüft, ob die APK ein Update genau dieser App ist (gleicher Paketname, höhere Version, gleiche Signatur).
+     * Prüft, ob die APK ein Update genau dieser App ist (gleicher Paketname, keine Uhr-App, höhere Version,
+     * gleiche Signatur).
      * Gibt eine Fehlermeldung zurück oder null, wenn alles passt.
      */
     fun verify(apk: File): String? {
         val pm = context.packageManager
         val archive = archiveInfo(pm, apk) ?: return "Die heruntergeladene Datei ist keine gültige App."
         if (archive.packageName != context.packageName) return "Die heruntergeladene App ist nicht die ADHS App."
+        // Die Uhr-App hat denselben Paketnamen und Schlüssel – sie darf nie als Update auf dem Handy landen.
+        if (archive.reqFeatures.orEmpty().any { it.name == PackageManager.FEATURE_WATCH }) {
+            return "Die heruntergeladene Datei ist die Uhr-App, nicht die Handy-App."
+        }
         val installed = installedInfo(pm)
         if (archive.longVersionCodeCompat() <= installed.longVersionCodeCompat()) {
             return "Diese Version ist bereits installiert."
@@ -88,7 +93,8 @@ class ApkInstaller(private val context: Context) {
     }
 
     private fun archiveInfo(pm: PackageManager, apk: File): PackageInfo? {
-        val flags = signatureFlags()
+        // Mit den verlangten Geräte-Merkmalen, damit verify() eine Uhr-App erkennt.
+        val flags = signatureFlags() or PackageManager.GET_CONFIGURATIONS
         return if (Build.VERSION.SDK_INT >= 33) {
             pm.getPackageArchiveInfo(apk.path, PackageManager.PackageInfoFlags.of(flags.toLong()))
         } else {
