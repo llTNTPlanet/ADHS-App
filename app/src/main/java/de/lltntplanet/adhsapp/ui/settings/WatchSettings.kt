@@ -15,7 +15,6 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,19 +36,20 @@ import de.lltntplanet.adhsapp.util.TimeFormat
 private val WatchGuideUrl =
     "https://github.com/${BuildConfig.UPDATE_REPO_OWNER}/${BuildConfig.UPDATE_REPO_NAME}#uhr-app-wear-os--pixel-watch"
 
-/** Einstellungen-Abschnitt „Uhr (Wear OS)“: Zustand der Uhr-App, wo Erinnerungen klingeln, Seiten auf der Uhr. */
+/**
+ * Einstellungen-Abschnitt „Uhr (Wear OS)“: Zustand der Uhr-App, wo Erinnerungen klingeln, Seiten auf der Uhr.
+ * Geänderte Einstellungen gehen von selbst an die Uhr: Jedes Speichern stößt den Abgleich der Übersicht an.
+ */
 @Composable
 fun WatchSettingsSection(s: AppSettings, update: ((AppSettings) -> AppSettings) -> Unit) {
     val container = appContainer()
     val context = LocalContext.current
     val status by container.watch.status.collectAsStateWithLifecycle()
-    // Die Einstellungen müssen auch dann offen bleiben, wenn die Verbindung zur Uhr hakt – deshalb runCatching.
+    // Sucht im Hintergrund und kehrt sofort zurück – auch ohne Uhr oder ohne Google-Dienste.
     LifecycleResumeEffect(Unit) {
-        runCatching { container.watch.refreshStatus() }
+        container.watch.refreshStatus()
         onPauseOrDispose { }
     }
-    // Die Übersicht enthält die sichtbaren Seiten und die Klingel-Auswahl: nach dem Speichern neu an die Uhr geben.
-    LaunchedEffect(s.watchHiddenPages, s.ringTarget) { runCatching { container.watchSync.requestSync() } }
     val text = watchStatusText(status, s.ringTarget) { at ->
         "${TimeFormat.relativeDay(Dates.toLocalDate(at))} ${TimeFormat.time(at)}"
     }
@@ -74,7 +74,10 @@ fun WatchSettingsSection(s: AppSettings, update: ((AppSettings) -> AppSettings) 
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),
         )
-        TextButton(onClick = { runCatching { container.watchSync.syncNow() } }) { Text("Übersicht jetzt senden") }
+        // Ohne Uhr-App gibt es nichts zu senden – der Status darüber sagt, was fehlt.
+        TextButton(enabled = status.watchName != null, onClick = { container.watchSync.syncNow() }) {
+            Text("Übersicht jetzt senden")
+        }
     }
 
     Label("Wo sollen Erinnerungen klingeln?")
@@ -116,6 +119,9 @@ fun WatchSettingsSection(s: AppSettings, update: ((AppSettings) -> AppSettings) 
         "Zusätzlich zur Vibration ein Weckton – nur, wenn die Uhr einen Lautsprecher hat.",
         s.watchSound,
     ) { v -> update { it.copy(watchSound = v) } }
+    watchVibrationHint(s.vibrate, s.watchSound, s.ringTarget)?.let { hint ->
+        Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+    }
 
     Label("Seiten auf der Uhr")
     WatchPage.entries.forEach { page ->

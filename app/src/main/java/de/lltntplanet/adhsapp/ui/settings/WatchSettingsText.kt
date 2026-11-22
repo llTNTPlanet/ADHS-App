@@ -51,6 +51,16 @@ internal fun watchStatusText(status: WatchStatus, target: RingTarget, formatTime
     }
 }
 
+/**
+ * Hinweis, wenn die Uhr bei einer Erinnerung nicht vibriert: Der Schalter „Vibration“ unter „Vollbild & Ton“ gilt
+ * auch für die Uhr. `null`, wenn sie vibriert oder gar nicht klingeln soll ([target] „Nur Handy“).
+ */
+internal fun watchVibrationHint(vibrate: Boolean, watchSound: Boolean, target: RingTarget): String? = when {
+    vibrate || !RingRouting.asksWatch(target) -> null
+    watchSound -> "„Vibration“ ist oben unter „Vollbild & Ton“ aus – das gilt auch für die Uhr. Sie meldet sich nur mit dem Ton."
+    else -> "„Vibration“ ist oben unter „Vollbild & Ton“ aus – das gilt auch für die Uhr. Ohne Ton zeigt sie Erinnerungen nur still an."
+}
+
 /** Die Uhr-App ist auf der Uhr [watchName] installiert: Verbindung, Version und was noch fehlt. */
 private fun foundWatchText(status: WatchStatus, watchName: String, target: RingTarget, lastSync: String): WatchStatusText {
     val asksWatch = RingRouting.asksWatch(target)

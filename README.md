@@ -278,9 +278,10 @@ Zur Handy-App gibt es eine kleine Begleit-App für Wear-OS-Uhren – gebaut für
 
 ### Installation (Debugging über WLAN)
 
-Die Uhr-App gibt es nicht im Play Store. Du spielst sie per `adb` auf die Uhr:
+Die Uhr-App gibt es nicht im Play Store. Du spielst sie per `adb` auf die Uhr. Die Menüs heißen je nach Uhr und
+Wear-OS-Version etwas anders – die Namen unten sind ungefähre Angaben:
 
-1. **Entwickleroptionen einschalten** – auf der Uhr: *Einstellungen → System → Info → Versionen*, dann 7× auf
+1. **Entwickleroptionen einschalten** – auf der Uhr etwa: *Einstellungen → System → Info → Versionen*, dann 7× auf
    **Build-Nummer** tippen.
 2. **Debugging einschalten** – auf der Uhr: *Einstellungen → Entwickleroptionen* → **ADB-Debugging** an, dann
    **Debugging über WLAN** an.
@@ -290,17 +291,19 @@ Die Uhr-App gibt es nicht im Play Store. Du spielst sie per `adb` auf die Uhr:
 5. **Koppeln, verbinden, installieren** – am PC im Ordner mit der `adhs-watch.apk`:
 
    ```bash
-   adb pair IP:PORT                 # IP:PORT aus „Neues Gerät koppeln“, danach den Kopplungscode eintippen
-   adb connect IP:PORT              # IP:PORT von der Seite „Debugging über WLAN“ (meist ein anderer Port)
-   adb install -r adhs-watch.apk    # -r ersetzt eine vorhandene Version, die Daten bleiben
+   adb pair IP:PORT                            # IP:PORT aus „Neues Gerät koppeln“, danach den Kopplungscode eintippen
+   adb connect IP:PORT                         # IP:PORT von der Seite „Debugging über WLAN“ (meist ein anderer Port)
+   adb -s IP:PORT install -r adhs-watch.apk    # dieselbe IP:PORT wie bei connect; -r ersetzt eine vorhandene Version
    ```
+
+   Das `-s IP:PORT` ist wichtig: Handy-App und Uhr-App haben denselben Paketnamen. Ohne `-s` könnte die Uhr-App auf
+   einem Handy landen, das gerade per USB am PC hängt – und dort die Handy-App ersetzen.
 6. **App einmal öffnen** – die App auf der Uhr starten und **Benachrichtigungen erlauben**. Ohne diese Erlaubnis
    kann die Uhr nicht klingeln (dann klingelt das Handy).
 7. **Aufräumen** – „Debugging über WLAN“ auf der Uhr wieder ausschalten; es kostet Akku.
 
 Wenn etwas hakt:
-- `adb devices` zeigt, ob die Uhr verbunden ist (`IP:PORT  device`). Hängt auch dein Handy an adb, nenne die Uhr
-  ausdrücklich: `adb -s IP:PORT install -r adhs-watch.apk`.
+- `adb devices` zeigt, ob die Uhr verbunden ist (`IP:PORT  device`).
 - Der Port ändert sich, wenn du „Debugging über WLAN“ aus- und einschaltest oder das WLAN wechselst. Dann
   `adb connect` mit dem neuen Port wiederholen; das Koppeln bleibt in der Regel gültig.
 - Gast-WLANs trennen Geräte oft voneinander. Nimm dann dein normales WLAN oder den Hotspot deines Handys.
@@ -324,7 +327,8 @@ Alles steht unter *Einstellungen → Uhr (Wear OS)*:
   | Uhr, wenn ich sie trage – sonst Handy | Liegt die Uhr ab oder lädt sie, klingelt das Handy. Kann die Uhr es nicht sicher erkennen, klingeln beide. |
 
   Immer gilt: Ist die Uhr nicht erreichbar oder antwortet sie nicht, klingelt das Handy.
-- **Ton auf der Uhr** – zusätzlich zur Vibration ein Weckton, wenn die Uhr einen Lautsprecher hat.
+- **Ton auf der Uhr** – zusätzlich zur Vibration ein Weckton, wenn die Uhr einen Lautsprecher hat. Der Schalter
+  „Vibration“ unter *Vollbild & Ton* gilt auch für die Uhr: Ist er aus, vibriert sie nicht.
 - **Seiten auf der Uhr** – welche Unterseiten die Uhr zeigt. Die Startseite „Heute“ ist immer dabei.
 - **Übersicht jetzt senden** – schickt die Übersicht sofort neu an die Uhr. Sonst passiert das von selbst, sobald
   sich etwas ändert.
@@ -336,22 +340,23 @@ Auf Wear OS darf eine App ihr Vollbild nur mit einer Sonder-Erlaubnis selbst öf
 setzen – am besten gleich nach der Installation, solange die Uhr noch verbunden ist:
 
 ```bash
-adb shell appops set de.lltntplanet.adhsapp SYSTEM_ALERT_WINDOW allow
+adb -s IP:PORT shell appops set de.lltntplanet.adhsapp SYSTEM_ALERT_WINDOW allow
 ```
 
 Dann öffnet die Uhr die Erinnerung selbst im Vollbild. Ohne den Befehl klingelt die Uhr genauso; das Vollbild
 erscheint dann, sobald du die Benachrichtigung antippst. Ob es geklappt hat, zeigt der Status am Handy
-(„Vollbild auf der Uhr: öffnet sich von selbst.“). Hängt auch dein Handy an adb, gehört wieder `-s IP:PORT` hinter `adb`.
+(„Vollbild auf der Uhr: öffnet sich von selbst.“).
 
 ### Grenzen
 
 - Die Uhr plant nichts selbst. Das Handy sagt ihr, wann sie klingeln soll – ist das Handy aus oder außer Reichweite,
   bleibt die Uhr still.
 - Ohne Verbindung zur Uhr klingelt immer das Handy.
-- Die stille Erinnerung „Mahlzeit eintragen“ kommt nur am Handy.
+- Die stille Erinnerung „Mahlzeit eintragen“ bleibt am Handy – die Uhr-App zeigt sie nicht. Wear OS spiegelt sie
+  höchstens wie jede andere Benachrichtigung des Handys.
 - Checkups füllst du am Handy aus; auf der Uhr lassen sie sich nicht abhaken.
 - Die Uhr-App aktualisiert sich nicht selbst. Für eine neue Version wieder `adhs-watch.zip` aus dem Release laden und
-  per `adb install -r adhs-watch.apk` installieren (Schritte 2 bis 5; das Koppeln entfällt meist). Nötig ist das,
+  per `adb -s IP:PORT install -r adhs-watch.apk` installieren (Schritte 2 bis 5; das Koppeln entfällt meist). Nötig ist das,
   wenn der Status am Handy meldet „Handy-App und Uhr-App passen nicht zusammen“ – sonst nach Belieben.
 
 ## Datenschutz

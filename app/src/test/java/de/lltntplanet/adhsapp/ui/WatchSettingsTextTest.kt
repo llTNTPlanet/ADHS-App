@@ -4,8 +4,10 @@ import de.lltntplanet.adhsapp.shared.RingTarget
 import de.lltntplanet.adhsapp.shared.WATCH_PROTOCOL_VERSION
 import de.lltntplanet.adhsapp.shared.WatchInfo
 import de.lltntplanet.adhsapp.ui.settings.watchStatusText
+import de.lltntplanet.adhsapp.ui.settings.watchVibrationHint
 import de.lltntplanet.adhsapp.watch.WatchStatus
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -149,5 +151,22 @@ class WatchSettingsTextTest {
     fun blankWatchNameGetsFriendlyFallback() {
         val text = watchStatusText(connected.copy(watchName = "  "), RingTarget.BOTH, time)
         assertEquals("Uhr-App auf deiner Uhr gefunden und verbunden.", text.headline)
+    }
+
+    @Test
+    fun vibrationHintOnlyWhenTheWatchWouldNotVibrate() {
+        // Vibration an: kein Hinweis.
+        assertNull(watchVibrationHint(vibrate = true, watchSound = false, target = RingTarget.WATCH))
+        assertNull(watchVibrationHint(vibrate = true, watchSound = true, target = RingTarget.BOTH))
+        // „Nur Handy“: Die Uhr klingelt ohnehin nicht.
+        assertNull(watchVibrationHint(vibrate = false, watchSound = false, target = RingTarget.PHONE))
+        assertEquals(
+            "„Vibration“ ist oben unter „Vollbild & Ton“ aus – das gilt auch für die Uhr. Sie meldet sich nur mit dem Ton.",
+            watchVibrationHint(vibrate = false, watchSound = true, target = RingTarget.BOTH),
+        )
+        assertEquals(
+            "„Vibration“ ist oben unter „Vollbild & Ton“ aus – das gilt auch für die Uhr. Ohne Ton zeigt sie Erinnerungen nur still an.",
+            watchVibrationHint(vibrate = false, watchSound = false, target = RingTarget.WATCH_IF_WORN),
+        )
     }
 }
