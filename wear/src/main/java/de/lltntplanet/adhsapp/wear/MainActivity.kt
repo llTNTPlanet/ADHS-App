@@ -15,13 +15,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.edit
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import de.lltntplanet.adhsapp.wear.alert.AlertActivity
 import de.lltntplanet.adhsapp.wear.ui.OverviewLogic
 import de.lltntplanet.adhsapp.wear.ui.WatchRoot
 import de.lltntplanet.adhsapp.wear.ui.theme.AdhsWearTheme
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -45,22 +44,15 @@ class MainActivity : ComponentActivity() {
     /** Hätte das System vor der letzten Frage eine Begründung verlangt? Daran zeigt sich „nicht mehr fragen“. */
     private var rationaleBefore = false
 
+    /** Prüft regelmäßig, ob die Übersicht zu alt ist – nur solange die App vorn ist. */
+    private var syncJob: Job? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val overview = container.overview
         val alerts = container.alerts
         canRing = alerts.canShow()
         showIntro = !hasNotificationPermission() && !prefs.getBoolean(KEY_ASKED, false)
-
-        // Jedes Mal, wenn die App nach vorn kommt, und danach regelmäßig: Ist die Übersicht zu alt?
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                while (true) {
-                    overview.syncIfNeeded()
-                    delay(OverviewLogic.SYNC_CHECK_MILLIS)
-                }
-            }
-        }
 
         setContent {
             AdhsWearTheme {
@@ -95,6 +87,21 @@ class MainActivity : ComponentActivity() {
         // Das Handy zeigt in seinen Einstellungen an, ob die Uhr-App klingeln darf.
         val phone = container.phone
         container.scope.launch { phone.publishInfo() }
+        // Jedes Mal, wenn die App nach vorn kommt, und danach regelmäßig: Ist die Übersicht zu alt?
+        val overview = container.overview
+        syncJob?.cancel()
+        syncJob = lifecycleScope.launch {
+            while (true) {
+                overview.syncIfNeeded()
+                delay(OverviewLogic.SYNC_CHECK_MILLIS)
+            }
+        }
+    }
+
+    override fun onPause() {
+        syncJob?.cancel()
+        syncJob = null
+        super.onPause()
     }
 
     override fun onStop() {
