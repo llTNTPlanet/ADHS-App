@@ -120,7 +120,9 @@ fun WatchSettingsSection(s: AppSettings, update: ((AppSettings) -> AppSettings) 
         s.watchSound,
     ) { v -> update { it.copy(watchSound = v) } }
     watchVibrationHint(s.vibrate, s.watchSound, s.ringTarget)?.let { hint ->
-        Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+        // Nur mit Ton ist es eine Warnung (nicht jede Uhr hat einen Lautsprecher); ohne Ton vibriert die Uhr ohnehin.
+        val color = if (s.watchSound) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+        Text(hint, style = MaterialTheme.typography.bodySmall, color = color)
     }
 
     Label("Seiten auf der Uhr")

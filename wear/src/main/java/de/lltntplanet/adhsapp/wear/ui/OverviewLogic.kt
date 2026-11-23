@@ -3,6 +3,7 @@ package de.lltntplanet.adhsapp.wear.ui
 import de.lltntplanet.adhsapp.shared.ItemAction
 import de.lltntplanet.adhsapp.shared.WatchBirthday
 import de.lltntplanet.adhsapp.shared.WatchEvent
+import de.lltntplanet.adhsapp.shared.WatchPage
 import de.lltntplanet.adhsapp.shared.WatchRoutine
 import de.lltntplanet.adhsapp.shared.WatchSnapshot
 import de.lltntplanet.adhsapp.shared.WatchSnapshotLogic
@@ -30,8 +31,11 @@ object OverviewLogic {
     const val HOME_TASKS = 5
     const val HOME_BIRTHDAYS = 3
 
-    /** So weit schaut die Seite „Kalender“ höchstens voraus. */
-    const val CALENDAR_DAYS = 14
+    /** „Jetzt“ und „Als Nächstes“ auf der Startseite schauen wie am Handy nur auf heute und morgen. */
+    const val HOME_EVENT_DAYS = 2
+
+    /** So viele Tage nach heute zeigt die Seite „Kalender“ höchstens – mehr liefert das Handy nicht. */
+    const val CALENDAR_DAYS_AHEAD = 7
 
     const val PHONE_UNREACHABLE = "Handy nicht erreichbar"
     const val NO_ANSWER = "Handy antwortet nicht"
@@ -91,9 +95,13 @@ object OverviewLogic {
         minutes = routine.minutes,
     )
 
-    /** Was das Handy tun soll, wenn auf der Uhr eine Aufgabe abgehakt wird (oder der Haken wegkommt). */
+    /**
+     * Was das Handy tun soll, wenn auf der Uhr eine Aufgabe abgehakt wird (oder der Haken wegkommt). Der
+     * Fälligkeitstag der angezeigten Aufgabe geht mit: Daran erkennt das Handy, ob eine wiederkehrende Aufgabe
+     * inzwischen schon auf den nächsten Termin gerückt ist – dann schaltet es sie nicht noch einmal weiter.
+     */
     fun taskAction(task: WatchTask, done: Boolean): ItemAction =
-        ItemAction(type = ItemAction.TYPE_TASK, id = task.id, done = done)
+        ItemAction(type = ItemAction.TYPE_TASK, id = task.id, done = done, epochDay = task.dueEpochDay)
 
     /** Die Liste der zuletzt abgehakten Aufgaben mit [task] (einmal) am Ende. */
     fun checked(list: List<WatchTask>, task: WatchTask): List<WatchTask> = unchecked(list, task.id) + task
@@ -131,12 +139,25 @@ object OverviewLogic {
             .take(limit)
 
     /**
-     * Die Tage der Seite „Kalender“: heute immer (auch ohne Termine), danach jeder Tag mit Terminen – höchstens
-     * [CALENDAR_DAYS] Tage voraus. Ganztägige Termine stehen je Tag zuerst.
+     * Die Termine für „Jetzt“ und „Als Nächstes“ auf der Startseite: alles, was vor übermorgen beginnt – wie am
+     * Handy, egal wie viele Tage die Übersicht enthält.
+     */
+    fun homeEvents(events: List<WatchEvent>, todayEpochDay: Long, zone: ZoneId): List<WatchEvent> {
+        val limit = WatchFormat.dayStart(todayEpochDay + HOME_EVENT_DAYS, zone)
+        return events.filter { it.begin < limit }
+    }
+
+    /** Ist die Unterseite [page] am Handy ausgeblendet? Ohne Übersicht ist das nicht bekannt – dann nein. */
+    fun isHidden(page: WatchPage, snapshot: WatchSnapshot?): Boolean =
+        snapshot != null && page !in WatchSnapshotLogic.visiblePages(snapshot)
+
+    /**
+     * Die Tage der Seite „Kalender“: heute immer (auch ohne Termine), danach jeder Tag mit Terminen – bis
+     * heute + [CALENDAR_DAYS_AHEAD]. Ganztägige Termine stehen je Tag zuerst.
      */
     fun calendarDays(events: List<WatchEvent>, todayEpochDay: Long, zone: ZoneId): List<Day> {
         val days = ArrayList<Day>()
-        for (offset in 0 until CALENDAR_DAYS) {
+        for (offset in 0..CALENDAR_DAYS_AHEAD) {
             val epochDay = todayEpochDay + offset
             val start = WatchFormat.dayStart(epochDay, zone)
             val end = WatchFormat.dayStart(epochDay + 1, zone)

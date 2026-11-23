@@ -44,6 +44,7 @@ import de.lltntplanet.adhsapp.update.UpdateWorker
 import de.lltntplanet.adhsapp.watch.ReminderDelivery
 import de.lltntplanet.adhsapp.watch.WatchLink
 import de.lltntplanet.adhsapp.watch.WatchSync
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -113,7 +114,7 @@ class AppContainer(val app: Application) {
     val watchSync = WatchSync(
         app, scope, watch, settings, calendar, birthdays, health, db.taskDao(), db.routineDao(), db.foodDao(),
     )
-    val notifier = ReminderNotifier(app, watch) { settingsState.value.ringTarget }
+    val notifier = ReminderNotifier(app, watch)
     /** Meldungen des Medikamentenspenders (Memio Go über iDispenser), mitgelesen aus deren Benachrichtigungen. */
     val dispenser = DispenserRepository(db.dispenserDao(), routines) { key -> notifier.cancelKey(key) }
     val reminderEngine = ReminderEngine(app, calendar, birthdays, db.taskDao(), db.routineDao(), db.reminderDao(), settings)
@@ -150,7 +151,8 @@ class AppContainer(val app: Application) {
         rescheduleJob = scope.launch {
             delay(300)
             runCatching { reminderEngine.reschedule() }
-                .onFailure { Log.e("AppContainer", "Neuplanung fehlgeschlagen", it) }
+                // Ein Abbruch ist kein Fehler: Der nächste Aufruf hat diese Neuplanung abgelöst.
+                .onFailure { if (it !is CancellationException) Log.e("AppContainer", "Neuplanung fehlgeschlagen", it) }
         }
         watchSync.requestSync()
     }

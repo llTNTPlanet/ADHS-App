@@ -4,6 +4,7 @@ import de.lltntplanet.adhsapp.Berlin
 import de.lltntplanet.adhsapp.allDayEvent
 import de.lltntplanet.adhsapp.data.birthdays.Birthday
 import de.lltntplanet.adhsapp.data.birthdays.BirthdaySource
+import de.lltntplanet.adhsapp.data.db.Repeat
 import de.lltntplanet.adhsapp.data.db.TaskEntity
 import de.lltntplanet.adhsapp.data.settings.AppSettings
 import de.lltntplanet.adhsapp.event
@@ -243,6 +244,44 @@ class ReminderPlannerTest {
         assertEquals(millis("2026-10-24T08:00"), result[0].triggerAt)
         assertEquals(millis("2026-10-24T10:00"), result[1].triggerAt)
         assertTrue(result[1].allDay)
+    }
+
+    @Test
+    fun taskKeyNamesTaskDayAndTime() {
+        val day = LocalDate.of(2026, 10, 24).toEpochDay()
+        val timed = TaskEntity(id = 1, title = "Tabletten", dueEpochDay = day, dueMinutes = 8 * 60)
+        val allDay = TaskEntity(id = 2, title = "Steuer", dueEpochDay = day)
+        assertEquals("task:1:$day:480", ReminderPlanner.taskKey(timed))
+        assertEquals("task:2:$day:-1", ReminderPlanner.taskKey(allDay))
+        // Die geplanten Erinnerungen tragen genau diesen Schlüssel.
+        val planned = ReminderPlanner.planTasks(listOf(timed, allDay), settings, Berlin)
+        assertEquals(listOf(ReminderPlanner.taskKey(timed), ReminderPlanner.taskKey(allDay)), planned.map { it.key })
+    }
+
+    @Test
+    fun reminderOfRepeatingTaskOnlyCountsForItsCurrentDueDay() {
+        val day = LocalDate.of(2026, 10, 24).toEpochDay()
+        val daily = TaskEntity(id = 5, title = "Tabletten bestellen", dueEpochDay = day, dueMinutes = 9 * 60, repeat = Repeat.DAILY)
+        val key = ReminderPlanner.taskKey(daily)
+        assertTrue(ReminderPlanner.isCurrentTaskReminder(key, daily))
+        // Uhrzeit am selben Tag geändert: Die Erinnerung gehört weiter zu diesem Termin.
+        assertTrue(ReminderPlanner.isCurrentTaskReminder(key, daily.copy(dueMinutes = 10 * 60)))
+        // Abgehakt und auf morgen gerückt: Die alte Erinnerung darf nicht noch einmal weiterschalten.
+        assertFalse(ReminderPlanner.isCurrentTaskReminder(key, daily.copy(dueEpochDay = day + 1)))
+        // Eine andere Aufgabe oder ein Tag, der nur gleich anfängt, zählt nicht.
+        assertFalse(ReminderPlanner.isCurrentTaskReminder(key, daily.copy(id = 55)))
+        assertFalse(ReminderPlanner.isCurrentTaskReminder("task:5:${day}1:540", daily))
+    }
+
+    @Test
+    fun reminderOfPlainTaskAlwaysCounts() {
+        val day = LocalDate.of(2026, 10, 24).toEpochDay()
+        val once = TaskEntity(id = 6, title = "Steuer", dueEpochDay = day)
+        val oldKey = "task:6:${day - 3}:-1"
+        // Nicht wiederkehrend: Doppeltes Abhaken ist harmlos, es wird nichts geprüft.
+        assertTrue(ReminderPlanner.isCurrentTaskReminder(oldKey, once))
+        // Wiederkehrend, aber ohne Datum: Abhaken erledigt sie nur – ebenfalls harmlos.
+        assertTrue(ReminderPlanner.isCurrentTaskReminder(oldKey, once.copy(repeat = Repeat.WEEKLY, dueEpochDay = null)))
     }
 
     @Test

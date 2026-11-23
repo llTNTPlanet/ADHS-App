@@ -209,6 +209,31 @@ class WatchRemindersTest {
     }
 
     @Test
+    fun watchNeverStaysCompletelySilent() {
+        // Vibration und Ton auf der Uhr beide aus: Die Uhr vibriert trotzdem, sonst ginge die Erinnerung unter.
+        val silent = AppSettings(ringTarget = RingTarget.WATCH, vibrate = false, watchSound = false)
+        val request = WatchReminders.ringRequest(listOf(event), silent, requestId = "abc", now = now, zone = Berlin)
+        assertTrue(request.vibrate)
+        assertFalse(request.sound)
+        // Alle vier Kombinationen: Nur „Vibration aus, Ton an“ schaltet die Vibration der Uhr wirklich ab.
+        val expected = mapOf(
+            (true to true) to true,
+            (true to false) to true,
+            (false to true) to false,
+            (false to false) to true,
+        )
+        for ((switches, vibrates) in expected) {
+            val (vibrate, watchSound) = switches
+            val settings = AppSettings(vibrate = vibrate, watchSound = watchSound)
+            val r = WatchReminders.ringRequest(listOf(event), settings, now = now, zone = Berlin)
+            assertEquals("vibrate=$vibrate, watchSound=$watchSound", vibrates, r.vibrate)
+            assertEquals(watchSound, r.sound)
+            // Stumm und ohne Vibration zugleich gibt es nicht.
+            assertTrue(r.vibrate || r.sound)
+        }
+    }
+
+    @Test
     fun onlyWornTargetAsksForWornCheck() {
         val expected = mapOf(
             RingTarget.PHONE to false,

@@ -5,6 +5,9 @@ import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.os.VibrationAttributes
+import android.os.VibrationEffect
+import android.os.VibratorManager
 import android.util.Log
 import de.lltntplanet.adhsapp.shared.ReminderAction
 import de.lltntplanet.adhsapp.shared.RingRequest
@@ -158,8 +161,9 @@ class AlertController(
 
     /**
      * Knopf einer Erinnerung: Die Uhr ist sofort still und die Erinnerung verschwindet, dann geht die Aktion
-     * ans Handy. `true`, wenn das Handy sie ausgeführt hat – sonst erscheint der Hinweis „Handy nicht
-     * erreichbar“. [action] ist eine der Konstanten aus `ReminderActions`.
+     * ans Handy. `true`, wenn das Handy sie ausgeführt hat. Sonst kommt die Erinnerung still zurück auf die Uhr
+     * (der Knopf lässt sich dann noch einmal drücken) und der Hinweis „Handy nicht erreichbar“ erscheint.
+     * [action] ist eine der Konstanten aus `ReminderActions`.
      */
     suspend fun perform(reminder: WatchReminder, action: String, minutes: Int = 0): Boolean {
         begin(reminder)
@@ -253,19 +257,63 @@ class AlertController(
         }
     }
 
-    private suspend fun report(reminder: WatchReminder, action: String, minutes: Int): Boolean =
+    private suspend fun report(reminder: WatchReminder, action: String, minutes: Int): Boolean {
+        var ok = false
         try {
-            val ok = phone.sendReminderAction(ReminderAction(action, reminder.payload, minutes))
-            // Den Hinweis setzen, bevor der Zähler sinkt – sonst schlösse sich das Vollbild vorher.
-            if (!ok) showNotice()
-            ok
+            ok = phone.sendReminderAction(ReminderAction(action, reminder.payload, minutes))
         } finally {
-            _sending.update { it - 1 }
+            try {
+                if (ok) {
+                    // Das Handy ist erreichbar: Der Hinweis von einem früheren Versuch hat sich erledigt.
+                    if (_notice.value != null) clearNotice()
+                } else {
+                    // Nicht angekommen (oder ein Fehler): Die Erinnerung darf nicht verschwinden. Sie und der
+                    // Hinweis stehen, bevor der Zähler sinkt – sonst schlösse sich das Vollbild vorher.
+                    putBack(reminder)
+                    showNotice()
+                }
+            } finally {
+                _sending.update { it - 1 }
+            }
         }
+        return ok
+    }
+
+    /**
+     * Legt eine Erinnerung still zurück auf die Uhr, deren Knopfdruck das Handy nicht erreicht hat: als
+     * Benachrichtigung mit Knöpfen und im Vollbild, ohne neues Klingeln. Die Uhr fragt nicht von selbst noch
+     * einmal nach – ein zweites „später“ würde am Handy doppelt eingetragen. Entfernt das Handy die Erinnerung
+     * danach doch noch, verschwindet sie wie gewohnt ([dismiss]).
+     */
+    private fun putBack(reminder: WatchReminder) {
+        val key = reminder.originKey
+        synchronized(lock) {
+            if (_active.value.any { it.originKey == key }) return
+            // Nach vorn: Im Vollbild steht sie dann direkt unter dem Hinweis.
+            _active.value = listOf(reminder) + _active.value
+            renderLocked()
+        }
+        // Trug eben noch der Klingel-Dienst diese Benachrichtigung, entfernt das System sie mit etwas Verzögerung –
+        // und träfe dann die neue mit derselben Nummer. Deshalb kurz darauf noch einmal zeigen.
+        handler.postDelayed({ showAgain(key) }, PUT_BACK_CHECK_MILLIS)
+    }
+
+    /** Zeigt die stille Benachrichtigung einer Erinnerung noch einmal – nur wenn sie noch still dasteht. */
+    private fun showAgain(key: String) {
+        synchronized(lock) {
+            if (posted[key] != AlertStyle.QUIET) return
+            val reminder = _active.value.firstOrNull { it.originKey == key } ?: return
+            // Steht sie noch, ändert sich nichts: Sie blendet nicht erneut auf.
+            if (notifications.post(reminder, AlertStyle.QUIET)) return
+            posted.remove(key)
+        }
+    }
 
     private fun showNotice() {
         _notice.value = AlertLogic.PHONE_UNREACHABLE
         if (!uiVisible) notifications.postNotice()
+        // Der Arm ist nach dem Knopfdruck oft schon wieder unten: Ein kurzer Stoß macht auf den Hinweis aufmerksam.
+        buzzOnce()
         synchronized(lock) {
             noticeJob?.cancel()
             noticeJob = scope.launch {
@@ -273,6 +321,16 @@ class AlertController(
                 _notice.value = null
             }
         }
+    }
+
+    /** Ein einzelner kurzer Stoß – als „Wecker“ eingestuft wie das Klingeln, damit er auch im Hintergrund ankommt. */
+    private fun buzzOnce() {
+        runCatching {
+            context.getSystemService(VibratorManager::class.java)?.defaultVibrator?.vibrate(
+                VibrationEffect.createOneShot(VibrationPlan.NOTICE_BUZZ_MILLIS, VibrationEffect.DEFAULT_AMPLITUDE),
+                VibrationAttributes.createForUsage(VibrationAttributes.USAGE_ALARM),
+            )
+        }.onFailure { Log.w(TAG, "Vibrieren nicht möglich", it) }
     }
 
     // ---- Zustand ----
@@ -435,5 +493,8 @@ class AlertController(
 
         /** So viel länger als die Klingelzeit lebt die vibrierende Benachrichtigung höchstens. */
         const val FALLBACK_MARGIN_MILLIS = 2_000L
+
+        /** So lange nach dem Zurücklegen wird die stille Benachrichtigung noch einmal gezeigt. */
+        const val PUT_BACK_CHECK_MILLIS = 1_000L
     }
 }

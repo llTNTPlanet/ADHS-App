@@ -21,6 +21,16 @@ internal class AlertSound(private val context: Context) {
     private var player: MediaPlayer? = null
     private var tone: ToneGenerator? = null
 
+    /**
+     * Ist der Ton gerade wirklich zu hören? Nein, wenn die Uhr keinen Lautsprecher hat, weder Weckton noch
+     * Piepton gestartet sind oder die Wecker-Lautstärke auf 0 steht. Dann muss die Uhr vibrieren – sonst ginge
+     * die Erinnerung unter.
+     */
+    val audible: Boolean
+        get() = (player != null || tone != null) && runCatching {
+            (context.getSystemService(AudioManager::class.java)?.getStreamVolume(AudioManager.STREAM_ALARM) ?: 0) > 0
+        }.getOrDefault(false)
+
     fun start() {
         if (player != null || tone != null) return
         if (!hasSpeaker()) return

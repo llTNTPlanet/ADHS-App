@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -30,7 +31,9 @@ import androidx.wear.compose.material3.lazy.rememberTransformationSpec
 import androidx.wear.compose.material3.lazy.transformedHeight
 import de.lltntplanet.adhsapp.shared.ReminderActions
 import de.lltntplanet.adhsapp.wear.WearApp
+import de.lltntplanet.adhsapp.wear.ui.minuteTicks
 import de.lltntplanet.adhsapp.wear.ui.theme.AdhsWearTheme
+import java.time.ZoneId
 
 /**
  * Vollbild der Erinnerungen: zeigt alles, was gerade auf der Uhr steht, mit großen Knöpfen. Nur Oberfläche –
@@ -87,6 +90,10 @@ private fun AlertScreen(alerts: AlertController, onClose: () -> Unit) {
     val notice by alerts.notice.collectAsStateWithLifecycle()
     val sending by alerts.sending.collectAsStateWithLifecycle()
 
+    // Die Zeitangaben („Beginnt in 15 Min.“) rechnen jede Minute neu, solange das Vollbild zu sehen ist.
+    val now by remember { minuteTicks() }.collectAsStateWithLifecycle(initialValue = System.currentTimeMillis())
+    val zone = ZoneId.systemDefault()
+
     val noticeText = notice
     val waiting = sending > 0
     val nothingLeft = reminders.isEmpty() && noticeText == null && !waiting
@@ -138,7 +145,7 @@ private fun AlertScreen(alerts: AlertController, onClose: () -> Unit) {
                             Text(text = reminder.title, textAlign = TextAlign.Center, maxLines = 3)
                         }
                     }
-                    val text = AlertLogic.text(reminder)
+                    val text = AlertLogic.text(reminder, now, zone)
                     if (text.isNotBlank()) {
                         item(key = "text:$key") {
                             Text(

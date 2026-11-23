@@ -14,6 +14,7 @@ import androidx.core.app.NotificationManagerCompat
 import de.lltntplanet.adhsapp.shared.WatchJson
 import de.lltntplanet.adhsapp.shared.WatchReminder
 import de.lltntplanet.adhsapp.wear.R
+import java.time.ZoneId
 import kotlinx.serialization.encodeToString
 
 /**
@@ -58,27 +59,39 @@ internal class AlertNotifications(private val context: Context) {
         system.createNotificationChannels(listOf(ring, fallback))
     }
 
-    /** Darf die Uhr-App gerade Erinnerungen zeigen? (Benachrichtigungen erlaubt und der Kanal nicht abgeschaltet.) */
-    fun canShow(): Boolean = runCatching {
+    /**
+     * Darf die Uhr-App gerade Erinnerungen zeigen? Benachrichtigungen müssen erlaubt und beide Kanäle an sein:
+     * Ist der Rückfall-Kanal abgeschaltet, bliebe die Uhr still, sobald der Klingel-Dienst nicht starten darf.
+     */
+    fun canShow(): Boolean = usable(CHANNEL_RING, CHANNEL_FALLBACK)
+
+    /** Sind Benachrichtigungen erlaubt und diese Kanäle nicht abgeschaltet? Ein noch nicht angelegter gilt als an. */
+    private fun usable(vararg channels: String): Boolean = runCatching {
         val current = manager
         current.areNotificationsEnabled() &&
-            current.getNotificationChannel(CHANNEL_RING)?.importance != NotificationManager.IMPORTANCE_NONE
+            channels.all { current.getNotificationChannel(it)?.importance != NotificationManager.IMPORTANCE_NONE }
     }.getOrDefault(false)
 
-    /** [timeoutMillis] gilt nur für [AlertStyle.INSISTENT]: Danach beendet das System das Vibrieren von selbst. */
+    /**
+     * Die Zeitangabe („Beginnt in 15 Min.“) wird hier für den Augenblick gerechnet, in dem die Benachrichtigung
+     * entsteht – also beim Klingeln und noch einmal, wenn sie danach still stehen bleibt.
+     * [timeoutMillis] gilt nur für [AlertStyle.INSISTENT]: Danach beendet das System das Vibrieren von selbst.
+     */
     fun build(reminder: WatchReminder, style: AlertStyle, timeoutMillis: Long = 0L): Notification {
         val json = WatchJson.encodeToString(reminder)
         val insistent = style == AlertStyle.INSISTENT
+        val now = System.currentTimeMillis()
+        val zone = ZoneId.systemDefault()
         val builder = NotificationCompat.Builder(context, if (insistent) CHANNEL_FALLBACK else CHANNEL_RING)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(reminder.title)
-            .setContentText(reminder.subtitle)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(AlertLogic.text(reminder)))
+            .setContentText(AlertLogic.timeLine(reminder, now, zone))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(AlertLogic.text(reminder, now, zone)))
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setColor(reminder.color ?: DEFAULT_COLOR)
-            .setWhen(reminder.targetTime ?: System.currentTimeMillis())
+            .setWhen(reminder.targetTime ?: now)
             .setShowWhen(true)
             // Die Handy-App zeigt ihre eigene Benachrichtigung; diese hier gehört nur auf die Uhr.
             .setLocalOnly(true)
@@ -125,7 +138,8 @@ internal class AlertNotifications(private val context: Context) {
     /** Zeigt oder ersetzt die Benachrichtigung einer Erinnerung. `false`, wenn das nicht möglich ist. */
     @SuppressLint("MissingPermission")
     fun post(reminder: WatchReminder, style: AlertStyle, timeoutMillis: Long = 0L): Boolean {
-        if (!canShow()) return false
+        // Hier zählt nur der Kanal, auf dem diese Benachrichtigung erscheint.
+        if (!usable(if (style == AlertStyle.INSISTENT) CHANNEL_FALLBACK else CHANNEL_RING)) return false
         return try {
             manager.notify(AlertLogic.notificationId(reminder.originKey), build(reminder, style, timeoutMillis))
             true
@@ -142,7 +156,7 @@ internal class AlertNotifications(private val context: Context) {
     /** Hinweis, dass ein Knopfdruck das Handy nicht erreicht hat. */
     @SuppressLint("MissingPermission")
     fun postNotice() {
-        if (!canShow()) return
+        if (!usable(CHANNEL_RING)) return
         val notification = NotificationCompat.Builder(context, CHANNEL_RING)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(AlertLogic.NOTICE_TITLE)

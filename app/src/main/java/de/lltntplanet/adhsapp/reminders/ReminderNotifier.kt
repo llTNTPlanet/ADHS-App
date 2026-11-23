@@ -35,10 +35,11 @@ import kotlinx.coroutines.flow.asSharedFlow
  */
 class ReminderNotifier(
     private val context: Context,
-    /** Verbindung zur Uhr: Wird eine Erinnerung am Handy entfernt, verschwindet sie auch dort. */
+    /**
+     * Verbindung zur Uhr: Wird eine Erinnerung am Handy entfernt, verschwindet sie auch dort – egal, welches
+     * Klingel-Ziel gerade eingestellt ist (es kann seit dem Klingeln geändert worden sein).
+     */
     private val watch: WatchLink,
-    /** Das eingestellte Klingel-Ziel, ohne Warten. Bei „Nur Handy“ erfährt die Uhr nichts. */
-    private val ringTarget: () -> RingTarget,
 ) {
     private val _removed = MutableSharedFlow<String>(extraBufferCapacity = 32, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
@@ -226,10 +227,13 @@ class ReminderNotifier(
         announceRemoved(key, tellWatch = true)
     }
 
-    /** Sagt Bescheid, dass die Erinnerung weg ist: einem offenen Vollbild und – außer bei „Nur Handy“ – der Uhr. */
+    /**
+     * Sagt Bescheid, dass die Erinnerung weg ist: einem offenen Vollbild und der Uhr. Die Uhr erfährt es auch bei
+     * „Nur Handy“ – dort kann noch eine Erinnerung von vor dem Umstellen stehen. Ohne Uhr-App passiert dabei nichts.
+     */
     private fun announceRemoved(originKey: String, tellWatch: Boolean) {
         _removed.tryEmit(originKey)
-        if (tellWatch && ringTarget() != RingTarget.PHONE) watch.cancel(listOf(originKey))
+        if (tellWatch) watch.cancel(listOf(originKey))
     }
 
     private fun activityIntent(reminders: List<Reminder>, requestCode: Int, silent: Boolean = false): PendingIntent =

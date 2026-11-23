@@ -2,6 +2,7 @@ package de.lltntplanet.adhsapp.wear.ui
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -81,6 +82,11 @@ fun WatchRoot(
                 }
                 WatchPage.entries.forEach { page ->
                     composable(page.id) {
+                        // Am Handy ausgeblendet, während die Seite hier offen ist: zurück zur Startseite.
+                        val hidden = OverviewLogic.isHidden(page, snapshot)
+                        LaunchedEffect(hidden) {
+                            if (hidden) navController.popBackStack(HOME_ROUTE, inclusive = false)
+                        }
                         PageScreen(
                             page = page,
                             snapshot = snapshot,
@@ -125,8 +131,11 @@ private fun NoticeDialog(notice: OverviewController.Notice, onDismiss: () -> Uni
     )
 }
 
-/** Die Uhrzeit in Millisekunden: sofort und danach kurz nach jeder vollen Minute. */
-private fun minuteTicks(): Flow<Long> = flow {
+/**
+ * Die Uhrzeit in Millisekunden: sofort und danach kurz nach jeder vollen Minute. Danach rechnet auch das Vollbild
+ * der Erinnerungen seine Zeitangaben neu.
+ */
+internal fun minuteTicks(): Flow<Long> = flow {
     while (true) {
         val now = System.currentTimeMillis()
         emit(now)

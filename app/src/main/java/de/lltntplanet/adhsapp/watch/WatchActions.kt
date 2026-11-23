@@ -1,10 +1,14 @@
 package de.lltntplanet.adhsapp.watch
 
+import android.os.SystemClock
 import de.lltntplanet.adhsapp.AppContainer
+import de.lltntplanet.adhsapp.data.db.Repeat
 import de.lltntplanet.adhsapp.data.db.RoutineKind
+import de.lltntplanet.adhsapp.data.db.TaskEntity
 import de.lltntplanet.adhsapp.data.routines.RoutineLogic
 import de.lltntplanet.adhsapp.reminders.ReminderActionHandler
 import de.lltntplanet.adhsapp.reminders.ReminderPayload
+import de.lltntplanet.adhsapp.reminders.ReminderPlanner
 import de.lltntplanet.adhsapp.shared.ItemAction
 import de.lltntplanet.adhsapp.shared.ReminderAction
 import de.lltntplanet.adhsapp.shared.ReminderActions
@@ -18,6 +22,16 @@ import java.time.LocalDate
 internal object WatchActions {
 
     private const val MINUTES_PER_DAY = 24 * 60
+
+    /**
+     * Nur so lange nach Beginn einer Aktion nimmt das Handy die Erinnerung noch einmal von der Uhr. Hing die Aktion
+     * länger (das Handy schlief zwischendurch), kann dort schon die geschlummerte Wiederholung stehen – sie hat
+     * denselben Schlüssel und darf nicht verschwinden. Geschlummert wird mindestens eine Minute.
+     */
+    const val LATE_CANCEL_MILLIS = 20_000L
+
+    /** Darf die Erinnerung nach der Aktion noch einmal von der Uhr genommen werden? [elapsedMillis] = Dauer der Aktion. */
+    fun mayCancelAfterAction(elapsedMillis: Long): Boolean = elapsedMillis < LATE_CANCEL_MILLIS
 
     /** Knopf einer Erinnerung auf der Uhr → dieselbe Aktion wie der Knopf in der Handy-Benachrichtigung. */
     fun actionFor(name: String): ReminderActionHandler.Action? = when (name) {
@@ -34,7 +48,13 @@ internal object WatchActions {
             ?: return false
         val action = actionFor(request.action) ?: return false
         val reminder = ReminderPayload.decode(request.payload) ?: return false
+        val startedAt = SystemClock.elapsedRealtime()
         c.reminderActions.perform(action, reminder, request.minutes)
+        // Hat die Uhr inzwischen aufgegeben (keine Antwort in ihrer Wartezeit), steht die Erinnerung dort wieder.
+        // Jetzt ist sie ausgeführt: noch einmal entfernen, damit sie nicht ein zweites Mal bestätigt wird.
+        if (mayCancelAfterAction(SystemClock.elapsedRealtime() - startedAt)) {
+            c.watch.cancel(listOf(reminder.originKey ?: reminder.key))
+        }
         return true
     }
 
@@ -49,10 +69,23 @@ internal object WatchActions {
         }
     }
 
+    /**
+     * Zeigt die Uhr noch einen früheren Termin einer wiederkehrenden Aufgabe? Dann ist die Aufgabe am Handy schon
+     * weitergerückt, und der Haken darf sie nicht noch einmal weiterschalten. Die Uhr schickt dafür den
+     * Fälligkeitstag mit, den sie anzeigt; ohne Tag (ältere Uhr-App, Aufgabe ohne Datum) wird nicht geprüft.
+     */
+    fun isStaleTaskAction(task: TaskEntity, action: ItemAction): Boolean =
+        task.repeat != Repeat.NONE && action.epochDay != null && action.epochDay != task.dueEpochDay
+
     private suspend fun taskAction(c: AppContainer, action: ItemAction): Boolean {
         val task = c.tasks.byId(action.id) ?: return false
+        // Schon weitergerückt (z. B. am Handy abgehakt oder doppelt gesendet): nichts ändern, aber „ausgeführt“ melden.
+        if (isStaleTaskAction(task, action)) return true
         // Schon im gewünschten Zustand (z. B. doppelt gesendet): nichts ändern, aber „ausgeführt“ melden.
         if (task.done != action.done) c.tasks.setDone(task, action.done)
+        // Eine noch angezeigte Erinnerung dazu ist damit erledigt – am Handy und auf der Uhr. Der Schlüssel gehört
+        // zum Termin vor dem Weiterrücken; ohne Datum gibt es keine Erinnerung.
+        if (action.done && task.dueEpochDay != null) c.notifier.cancelKey(ReminderPlanner.taskKey(task))
         return true
     }
 

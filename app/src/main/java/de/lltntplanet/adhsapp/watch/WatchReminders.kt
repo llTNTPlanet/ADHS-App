@@ -47,7 +47,9 @@ object WatchReminders {
 
     /**
      * Die Anfrage „jetzt klingeln“ an die Uhr. Stille Erinnerungen (Mahlzeit eintragen) bleiben am Handy und
-     * fehlen deshalb. Wie geklingelt wird, kommt aus den Einstellungen.
+     * fehlen deshalb. Wie geklingelt wird, kommt aus den Einstellungen – mit einer Ausnahme: Ganz still bleibt die
+     * Uhr nie. Sie vibriert immer, außer „Vibration“ ist aus und „Ton auf der Uhr“ an. Sonst zeigte sie die
+     * Erinnerung unbemerkt an, während das Handy sich auf sie verlässt.
      */
     fun ringRequest(
         due: List<Reminder>,
@@ -60,7 +62,7 @@ object WatchReminders {
         sentAt = now,
         onlyIfWorn = RingRouting.onlyIfWorn(settings.ringTarget),
         reminders = due.filterNot { it.kind.isQuiet }.map { toWatch(it, now, zone) },
-        vibrate = settings.vibrate,
+        vibrate = settings.vibrate || !settings.watchSound,
         sound = settings.watchSound,
         ringSeconds = settings.ringSeconds,
     )

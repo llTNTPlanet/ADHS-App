@@ -17,6 +17,9 @@ object VibrationPlan {
     /** Für so viel Restzeit lohnt sich noch ein Stoß. */
     const val MIN_REST_MILLIS = 500L
 
+    /** Der einzelne kurze Stoß zum Hinweis „Handy nicht erreichbar“. */
+    const val NOTICE_BUZZ_MILLIS = 400L
+
     /** Ein Stoß: abwechselnd Pause und Vibration in Millisekunden, beginnend mit der Pause 0. */
     fun burst(): LongArray = longArrayOf(0, 500, 250, 500, 250, 800)
 

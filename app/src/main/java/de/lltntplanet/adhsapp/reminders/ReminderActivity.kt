@@ -210,7 +210,12 @@ class ReminderActivity : ComponentActivity() {
     private fun done(r: Reminder) {
         val id = r.refId
         if (r.kind == ReminderKind.TASK && id != null) {
-            container.scope.launch { container.tasks.setDone(id, true) }
+            container.scope.launch {
+                val task = container.tasks.byId(id) ?: return@launch
+                // Wie beim Knopf der Benachrichtigung: Eine wiederkehrende Aufgabe, die schon weitergerückt ist
+                // (woanders abgehakt), schaltet diese Erinnerung vom alten Termin nicht noch einmal weiter.
+                if (ReminderPlanner.isCurrentTaskReminder(r.originKey ?: r.key, task)) container.tasks.setDone(task, true)
+            }
         } else if (r.kind.isRoutine && id != null) {
             val at = r.targetTime ?: r.triggerAt
             container.scope.launch { container.routines.setDoneAt(id, at) }

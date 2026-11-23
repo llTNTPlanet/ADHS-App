@@ -154,18 +154,21 @@ class WatchSettingsTextTest {
     }
 
     @Test
-    fun vibrationHintOnlyWhenTheWatchWouldNotVibrate() {
+    fun vibrationHintSaysHowTheWatchRingsWithVibrationOff() {
         // Vibration an: kein Hinweis.
         assertNull(watchVibrationHint(vibrate = true, watchSound = false, target = RingTarget.WATCH))
         assertNull(watchVibrationHint(vibrate = true, watchSound = true, target = RingTarget.BOTH))
         // „Nur Handy“: Die Uhr klingelt ohnehin nicht.
         assertNull(watchVibrationHint(vibrate = false, watchSound = false, target = RingTarget.PHONE))
+        assertNull(watchVibrationHint(vibrate = false, watchSound = true, target = RingTarget.PHONE))
         assertEquals(
             "„Vibration“ ist oben unter „Vollbild & Ton“ aus – das gilt auch für die Uhr. Sie meldet sich nur mit dem Ton.",
             watchVibrationHint(vibrate = false, watchSound = true, target = RingTarget.BOTH),
         )
+        // Vibration und Ton aus: Ganz still bleibt die Uhr nie – sie vibriert trotzdem.
         assertEquals(
-            "„Vibration“ ist oben unter „Vollbild & Ton“ aus – das gilt auch für die Uhr. Ohne Ton zeigt sie Erinnerungen nur still an.",
+            "„Vibration“ ist oben unter „Vollbild & Ton“ aus. Weil auch der Ton auf der Uhr aus ist, vibriert die Uhr " +
+                "trotzdem – sonst ginge die Erinnerung unter.",
             watchVibrationHint(vibrate = false, watchSound = false, target = RingTarget.WATCH_IF_WORN),
         )
     }

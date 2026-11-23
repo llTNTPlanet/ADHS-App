@@ -3,8 +3,10 @@ package de.lltntplanet.adhsapp.wear.ui
 import de.lltntplanet.adhsapp.shared.ItemAction
 import de.lltntplanet.adhsapp.shared.WatchBirthday
 import de.lltntplanet.adhsapp.shared.WatchEvent
+import de.lltntplanet.adhsapp.shared.WatchPage
 import de.lltntplanet.adhsapp.shared.WatchRoutine
 import de.lltntplanet.adhsapp.shared.WatchSnapshot
+import de.lltntplanet.adhsapp.shared.WatchSnapshotLogic
 import de.lltntplanet.adhsapp.shared.WatchTask
 import java.time.ZoneId
 import org.junit.Assert.assertEquals
@@ -184,14 +186,31 @@ class OverviewLogicTest {
     }
 
     @Test
-    fun taskActionCarriesOnlyIdAndState() {
+    fun taskActionCarriesIdStateAndTheDueDayShown() {
         assertEquals(
-            ItemAction(type = ItemAction.TYPE_TASK, id = 5, done = true),
+            ItemAction(type = ItemAction.TYPE_TASK, id = 5, done = true, epochDay = today),
             OverviewLogic.taskAction(task(5), done = true),
         )
         assertEquals(
-            ItemAction(type = ItemAction.TYPE_TASK, id = 5, done = false),
+            ItemAction(type = ItemAction.TYPE_TASK, id = 5, done = false, epochDay = today),
             OverviewLogic.taskAction(task(5), done = false),
+        )
+        // Wiederkehrende Aufgabe, die noch mit dem Termin von gestern auf der Uhr steht: Genau dieser Tag geht
+        // mit – daran erkennt das Handy, ob sie inzwischen schon weitergerückt ist.
+        val overdue = WatchTask(id = 6, title = "Täglich", dueEpochDay = today - 1, repeating = true)
+        assertEquals(
+            ItemAction(type = ItemAction.TYPE_TASK, id = 6, done = true, epochDay = today - 1),
+            OverviewLogic.taskAction(overdue, done = true),
+        )
+    }
+
+    @Test
+    fun taskActionWithoutDueDayCarriesNoDay() {
+        // Ohne Datum gibt es keinen Tag mitzuschicken; die Uhrzeit gehört nicht dazu.
+        val undated = WatchTask(id = 7, title = "Irgendwann", dueMinutes = 600)
+        assertEquals(
+            ItemAction(type = ItemAction.TYPE_TASK, id = 7, done = true),
+            OverviewLogic.taskAction(undated, done = true),
         )
     }
 
@@ -270,14 +289,76 @@ class OverviewLogicTest {
     }
 
     @Test
-    fun calendarDaysStopAfterTwoWeeks() {
-        val lastDay = event(1, dayStart + 13 * day + 9 * hour, dayStart + 13 * day + 10 * hour)
-        val tooFar = event(2, dayStart + 14 * day + 9 * hour, dayStart + 14 * day + 10 * hour)
+    fun calendarDaysStopSevenDaysAfterToday() {
+        // Das Handy liefert die Termine von heute bis heute + 7 Tage – weiter reicht auch die Seite nicht.
+        val lastDay = event(1, dayStart + 7 * day + 9 * hour, dayStart + 7 * day + 10 * hour)
+        val tooFar = event(2, dayStart + 8 * day + 9 * hour, dayStart + 8 * day + 10 * hour)
+        // Reicht ein mehrtägiger Termin über das Ende hinaus, steht er nur an den Tagen, die vollständig da sind.
+        val trip = event(3, dayStart + 6 * day, dayStart + 10 * day, allDay = true)
 
-        val days = OverviewLogic.calendarDays(listOf(lastDay, tooFar), today, utc)
+        val days = OverviewLogic.calendarDays(listOf(lastDay, tooFar, trip), today, utc)
 
-        assertEquals(listOf(today, today + 13), days.map { it.epochDay })
-        assertEquals(listOf(lastDay), days.last().events)
+        assertEquals(listOf(today, today + 6, today + 7), days.map { it.epochDay })
+        assertEquals(listOf(trip), days[1].events)
+        assertEquals(listOf(trip, lastDay), days.last().events)
+    }
+
+    // ---- Startseite ----
+
+    @Test
+    fun homeEventsLookOnlyAtTodayAndTomorrow() {
+        val running = event(1, dayStart - hour, dayStart + hour)
+        val afternoon = event(2, dayStart + 15 * hour, dayStart + 16 * hour)
+        val tomorrowLate = event(3, dayStart + 2 * day - minute, dayStart + 2 * day + hour)
+        val dayAfter = event(4, dayStart + 2 * day, dayStart + 2 * day + hour)
+        val nextWeek = event(5, dayStart + 5 * day + 9 * hour, dayStart + 5 * day + 10 * hour)
+
+        // Was vor übermorgen 00:00 Uhr beginnt, zählt – auch wenn es schon gestern begonnen hat.
+        assertEquals(
+            listOf(running, afternoon, tomorrowLate),
+            OverviewLogic.homeEvents(listOf(running, afternoon, tomorrowLate, dayAfter, nextWeek), today, utc),
+        )
+    }
+
+    @Test
+    fun homeShowsNothingNextWhenTheNextEventIsDaysAway() {
+        // Wie am Handy: Der Termin in fünf Tagen ist kein „Als Nächstes“ – egal, wie weit die Übersicht reicht.
+        val nextWeek = event(5, dayStart + 5 * day + 9 * hour, dayStart + 5 * day + 10 * hour)
+        assertEquals(
+            WatchSnapshotLogic.NowNext(current = null, next = null),
+            WatchSnapshotLogic.nowNext(OverviewLogic.homeEvents(listOf(nextWeek), today, utc), now),
+        )
+
+        // Der Termin morgen früh dagegen schon.
+        val tomorrow = event(6, dayStart + day + 9 * hour, dayStart + day + 10 * hour)
+        assertEquals(
+            WatchSnapshotLogic.NowNext(current = null, next = tomorrow),
+            WatchSnapshotLogic.nowNext(OverviewLogic.homeEvents(listOf(nextWeek, tomorrow), today, utc), now),
+        )
+    }
+
+    @Test
+    fun homeEventsUseTheZoneOfThePhone() {
+        // 23:30 Uhr UTC am morgigen Tag ist in Berlin schon 00:30 Uhr übermorgen.
+        val late = event(1, dayStart + 2 * day - 30 * minute, dayStart + 2 * day + hour)
+        assertEquals(listOf(late), OverviewLogic.homeEvents(listOf(late), today, utc))
+        assertEquals(
+            emptyList<WatchEvent>(),
+            OverviewLogic.homeEvents(listOf(late), today, ZoneId.of("Europe/Berlin")),
+        )
+    }
+
+    // ---- Unterseiten ----
+
+    @Test
+    fun pageIsHiddenWhenThePhoneLeavesItOut() {
+        val snapshot = WatchSnapshot(pages = listOf(WatchPage.CALENDAR.id, WatchPage.TASKS.id))
+        assertFalse(OverviewLogic.isHidden(WatchPage.CALENDAR, snapshot))
+        assertTrue(OverviewLogic.isHidden(WatchPage.NUTRITION, snapshot))
+        // Vorgabe: Alle Seiten sind sichtbar.
+        assertFalse(OverviewLogic.isHidden(WatchPage.NUTRITION, WatchSnapshot()))
+        // Ohne Übersicht ist nichts bekannt: Die Seite bleibt offen.
+        assertFalse(OverviewLogic.isHidden(WatchPage.NUTRITION, null))
     }
 
     // ---- Hinweise ----

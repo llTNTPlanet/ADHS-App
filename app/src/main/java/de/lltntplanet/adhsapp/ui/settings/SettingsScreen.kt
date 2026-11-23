@@ -450,7 +450,8 @@ fun SettingsScreen(onBack: () -> Unit, onOpenSetup: () -> Unit) {
             Section("Über")
             Text("ADHS App ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium)
             Text(
-                "Alle Daten bleiben auf deinem Handy. Kalender und Kontakte kommen aus deinem Google-Konto auf dem Gerät, " +
+                "Alle Daten bleiben auf deinem Handy. Nutzt du die Uhr-App, gehen Erinnerungen und die Übersicht an deine " +
+                    "gekoppelte Uhr. Kalender und Kontakte kommen aus deinem Google-Konto auf dem Gerät, " +
                     "Gesundheitsdaten werden nur gelesen.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

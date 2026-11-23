@@ -53,8 +53,15 @@ class ReminderActionHandler(
     private suspend fun markDone(reminder: Reminder) {
         val id = reminder.refId ?: return
         if (!ReminderButtons.canDone(reminder)) return
-        if (reminder.kind.isRoutine) routines.setDoneAt(id, reminder.targetTime ?: reminder.triggerAt)
-        else tasks.setDone(id, true)
+        if (reminder.kind.isRoutine) {
+            routines.setDoneAt(id, reminder.targetTime ?: reminder.triggerAt)
+            return
+        }
+        val task = tasks.byId(id) ?: return
+        // Wiederkehrende Aufgabe schon weitergerückt (z. B. auf dem anderen Gerät abgehakt)? Dann gehört diese
+        // Erinnerung zum alten Termin und schaltet nicht noch einmal weiter.
+        if (!ReminderPlanner.isCurrentTaskReminder(reminder.originKey ?: reminder.key, task)) return
+        tasks.setDone(task, true)
     }
 
     companion object {

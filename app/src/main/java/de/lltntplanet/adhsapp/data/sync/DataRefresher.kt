@@ -5,6 +5,7 @@ import de.lltntplanet.adhsapp.data.google.GoogleTasksSync
 import de.lltntplanet.adhsapp.data.health.HealthRepository
 import de.lltntplanet.adhsapp.data.settings.SettingsRepository
 import de.lltntplanet.adhsapp.reminders.ReminderEngine
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -73,7 +74,9 @@ class DataRefresher(
                 }
                 val healthError = healthJob.await()?.also { Log.w(TAG, "Google Health konnte nicht geladen werden", it) }
                 val tasksError = tasksJob.await()?.also { Log.w(TAG, "Google Tasks konnten nicht abgeglichen werden", it) }
-                runCatching { reminderEngine.reschedule() }.onFailure { Log.e(TAG, "Neuplanung fehlgeschlagen", it) }
+                runCatching { reminderEngine.reschedule() }
+                    // Ein Abbruch ist kein Fehler (z. B. App verlassen): Der bisherige Alarm bleibt dabei stehen.
+                    .onFailure { if (it !is CancellationException) Log.e(TAG, "Neuplanung fehlgeschlagen", it) }
                 lastRun = System.currentTimeMillis()
                 _changes.value++
                 RefreshResult(lastRun, userInitiated, healthError, tasksError).also { _results.tryEmit(it) }

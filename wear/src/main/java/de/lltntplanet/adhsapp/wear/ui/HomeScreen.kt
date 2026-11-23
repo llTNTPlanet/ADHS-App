@@ -123,7 +123,7 @@ internal fun HomeScreen(
     }
 }
 
-/** „Jetzt“ und „Als Nächstes“ – oder der Hinweis, dass nichts mehr ansteht. */
+/** „Jetzt“ und „Als Nächstes“ – oder der Hinweis, dass heute und morgen nichts mehr ansteht. */
 private fun TransformingLazyColumnScope.eventItems(
     snapshot: WatchSnapshot,
     now: Long,
@@ -132,7 +132,8 @@ private fun TransformingLazyColumnScope.eventItems(
     spec: TransformationSpec,
     onOpen: (() -> Unit)?,
 ) {
-    val nowNext = WatchSnapshotLogic.nowNext(snapshot.events, now)
+    // Wie am Handy nur heute und morgen – auch wenn die Übersicht für die Seite „Kalender“ weiter reicht.
+    val nowNext = WatchSnapshotLogic.nowNext(OverviewLogic.homeEvents(snapshot.events, today, zone), now)
     val current = nowNext.current
     val next = nowNext.next
     if (current != null) {
@@ -146,7 +147,7 @@ private fun TransformingLazyColumnScope.eventItems(
     if (current == null && next == null) {
         item(key = "no-events") {
             if (snapshot.calendarAvailable) {
-                InfoCard(title = "Keine weiteren Termine 🎉", spec = spec, onClick = onOpen)
+                InfoCard(title = "Heute und morgen keine weiteren Termine 🎉", spec = spec, onClick = onOpen)
             } else {
                 InfoCard(title = "Kalender nicht freigegeben", spec = spec, line = "Bitte am Handy erlauben.")
             }

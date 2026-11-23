@@ -174,8 +174,12 @@ data class ItemAction(
     /** Aufgaben-ID bzw. Routinen-ID. */
     val id: Long,
     val done: Boolean,
-    /** Nur Routinen: Tag und Uhrzeit (Minuten seit Mitternacht) des Vorkommens. */
+    /**
+     * Routinen: Tag des Vorkommens. Aufgaben: der Fälligkeitstag, den die Uhr gerade anzeigt (`null` ohne Datum
+     * oder von einer älteren Uhr-App) – daran erkennt das Handy, ob eine wiederkehrende Aufgabe schon weitergerückt ist.
+     */
     val epochDay: Long? = null,
+    /** Nur Routinen: Uhrzeit des Vorkommens (Minuten seit Mitternacht). */
     val minutes: Int? = null,
 ) {
     companion object {

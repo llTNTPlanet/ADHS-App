@@ -263,8 +263,8 @@ Zur Handy-App gibt es eine kleine Begleit-App für Wear-OS-Uhren – gebaut für
   „OK“, „10 Min. später“, „Genommen“/„Erledigt“ und „Keine weiteren“. Bestätigst du auf einem Gerät, hört das
   andere auf.
 - **Du bestimmst, wo es klingelt:** nur Handy, nur Uhr, Handy und Uhr – oder „Uhr, wenn ich sie trage – sonst Handy“.
-- **Übersicht:** die Startseite „Heute“ in kompakt, dazu auf Wunsch Kalender, Aufgaben, Routinen, Geburtstage,
-  Gesundheit und Essen. Aufgaben und Routinen lassen sich auf der Uhr abhaken.
+- **Übersicht:** die Startseite „Heute“ in kompakt, dazu auf Wunsch Kalender (heute und die nächsten 7 Tage),
+  Aufgaben, Routinen, Geburtstage, Gesundheit und Essen. Aufgaben und Routinen lassen sich auf der Uhr abhaken.
 - **Nichts geht verloren:** Ist die Uhr nicht erreichbar oder antwortet sie nicht, klingelt das Handy wie gewohnt.
 
 ### Voraussetzungen
@@ -328,7 +328,8 @@ Alles steht unter *Einstellungen → Uhr (Wear OS)*:
 
   Immer gilt: Ist die Uhr nicht erreichbar oder antwortet sie nicht, klingelt das Handy.
 - **Ton auf der Uhr** – zusätzlich zur Vibration ein Weckton, wenn die Uhr einen Lautsprecher hat. Der Schalter
-  „Vibration“ unter *Vollbild & Ton* gilt auch für die Uhr: Ist er aus, vibriert sie nicht.
+  „Vibration“ unter *Vollbild & Ton* gilt auch für die Uhr: Ist er aus, meldet sie sich nur mit dem Ton. Ist auch
+  der Ton aus, vibriert sie trotzdem – ganz still bleibt die Uhr nie.
 - **Seiten auf der Uhr** – welche Unterseiten die Uhr zeigt. Die Startseite „Heute“ ist immer dabei.
 - **Übersicht jetzt senden** – schickt die Übersicht sofort neu an die Uhr. Sonst passiert das von selbst, sobald
   sich etwas ändert.
@@ -352,6 +353,8 @@ erscheint dann, sobald du die Benachrichtigung antippst. Ob es geklappt hat, zei
 - Die Uhr plant nichts selbst. Das Handy sagt ihr, wann sie klingeln soll – ist das Handy aus oder außer Reichweite,
   bleibt die Uhr still.
 - Ohne Verbindung zur Uhr klingelt immer das Handy.
+- Drückst du auf der Uhr einen Knopf, während das Handy nicht erreichbar ist, sagt die Uhr das und lässt die
+  Erinnerung stehen. Du kannst sie später noch einmal bestätigen – auf der Uhr oder am Handy.
 - Die stille Erinnerung „Mahlzeit eintragen“ bleibt am Handy – die Uhr-App zeigt sie nicht. Wear OS spiegelt sie
   höchstens wie jede andere Benachrichtigung des Handys.
 - Checkups füllst du am Handy aus; auf der Uhr lassen sie sich nicht abhaken.

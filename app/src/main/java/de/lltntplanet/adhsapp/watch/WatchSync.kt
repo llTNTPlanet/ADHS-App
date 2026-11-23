@@ -275,7 +275,7 @@ class WatchSync(
         /** So lange wartet [syncAndWait] normalerweise auf das Ende des Abgleichs (Worker). */
         const val WAIT_MILLIS = 10_000L
 
-        /** Kurze Wartezeit für Empfänger und den Listener-Dienst, die selbst schnell fertig sein müssen. */
+        /** Kurze Wartezeit für Empfänger, die selbst schnell fertig sein müssen. Der Listener-Dienst wartet kürzer. */
         const val BRIEF_WAIT_MILLIS = 3_000L
 
         /**

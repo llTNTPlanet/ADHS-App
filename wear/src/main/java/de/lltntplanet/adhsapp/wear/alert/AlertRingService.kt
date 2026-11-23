@@ -106,7 +106,10 @@ class AlertRingService : Service() {
             looping = false
             return
         }
-        if (vibrate) buzz()
+        // Ist nur der Ton gewünscht, aber gerade nicht zu hören (kein Lautsprecher, Lautstärke 0, Abspielen
+        // gescheitert), vibriert die Uhr trotzdem. Ohne Vibration und ohne Ton ([sound] ist dann null) bleibt
+        // sie still.
+        if (vibrate || sound?.audible == false) buzz()
         sound?.pulse()
         handler.postDelayed(cycle, VibrationPlan.cycleMillis)
     }
