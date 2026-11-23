@@ -14,6 +14,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Die Uhr-App darf nur Wear Material 3 verwenden (androidx.wear.compose.material3.*). Wear Material 2
+      # (androidx.wear.compose.material.*) liegt wegen der Navigation mit auf dem Klassenpfad und würde sich
+      # stillschweigend übersetzen lassen; das Material 3 des Handys (androidx.compose.material3.*) passt nicht zur Uhr.
+      - name: Uhr-App – nur Wear Material 3 importiert?
+        run: |
+          status=0
+          grep -rnE --include='*.kt' --include='*.java' \
+            '^[[:space:]]*import[[:space:]]+androidx\.(wear\.compose\.material|compose\.material3)\.' wear/src || status=$?
+          if [ "$status" -eq 0 ]; then
+            echo "::error::Falscher Import in der Uhr-App (siehe Zeilen oben): unter wear/ nur androidx.wear.compose.material3.* verwenden."
+            exit 1
+          fi
+          if [ "$status" -ne 1 ]; then
+            echo "::error::Import-Prüfung der Uhr-App fehlgeschlagen (grep meldet Fehler $status)."
+            exit 1
+          fi
+          echo "Keine falschen Importe unter wear/src."
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -27,6 +45,7 @@ jobs:
           mkdir -p ~/.android
           echo "$DEBUG_KEYSTORE_BASE64" | base64 -d > ~/.android/debug.keystore
 
+      # Baut alle Module: Handy-App (:app), Uhr-App (:wear) und das gemeinsame Datenformat (:shared).
       - name: Lint, Tests und APK
         run: ./gradlew lintDebug testDebugUnitTest assembleDebug
 
@@ -46,8 +65,19 @@ jobs:
           name: adhs-app-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
 
+      # Uhr-App als eigenes Artefakt. Sie versteht sich nur mit einer Handy-Testversion, die mit demselben
+      # Debug-Schlüssel signiert ist (sicher: aus demselben Lauf) – nicht mit einer Release-Version.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: adhs-watch-debug-apk
+          path: wear/build/outputs/apk/debug/wear-debug.apk
+
+      # Schlägt etwas fehl, stehen die Lint- und Testberichte aller Module hier.
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: reports
-          path: app/build/reports
+          path: |
+            app/build/reports
+            wear/build/reports
+            shared/build/reports

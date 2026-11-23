@@ -33,6 +33,7 @@ import de.lltntplanet.adhsapp.data.sync.RefreshWorker
 import de.lltntplanet.adhsapp.data.tasks.TaskRepository
 import de.lltntplanet.adhsapp.reminders.CalendarChangeWorker
 import de.lltntplanet.adhsapp.reminders.MaintenanceWorker
+import de.lltntplanet.adhsapp.reminders.ReminderActionHandler
 import de.lltntplanet.adhsapp.reminders.ReminderEngine
 import de.lltntplanet.adhsapp.reminders.ReminderNotifier
 import de.lltntplanet.adhsapp.update.ApkInstaller
@@ -40,6 +41,10 @@ import de.lltntplanet.adhsapp.update.GitHubReleaseClient
 import de.lltntplanet.adhsapp.update.UpdateManager
 import de.lltntplanet.adhsapp.update.UpdateNotifier
 import de.lltntplanet.adhsapp.update.UpdateWorker
+import de.lltntplanet.adhsapp.watch.ReminderDelivery
+import de.lltntplanet.adhsapp.watch.WatchLink
+import de.lltntplanet.adhsapp.watch.WatchSync
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -63,7 +68,12 @@ open class AdhsApp : Application() {
         UpdateWorker.ensureScheduled(this)
         CalendarChangeWorker.enqueue(this)
         RefreshWorker.ensureScheduled(this)
+        // Übersicht für die Uhr aktuell halten: beobachtet nur – ohne Uhr wird nichts erzeugt und nichts gesendet.
+        container.watchSync.start()
         container.requestReschedule()
+        // Uhr suchen (für die Einstellungen und damit der Alarm weiß, ob sich das Warten auf die Uhr lohnt).
+        // Läuft im Hintergrund und fängt alle Fehler ab – auch auf Handys ohne Uhr oder ohne Google-Dienste.
+        container.watch.refreshStatus()
         // Sichtbar: sofort und dann alle 5 Minuten aktualisieren; im Hintergrund übernimmt der RefreshWorker.
         ProcessLifecycleOwner.get().lifecycle.addObserver(
             object : DefaultLifecycleObserver {
@@ -98,10 +108,20 @@ class AppContainer(val app: Application) {
     val health = HealthRepository(HealthApi(http), settings, auth)
     val tasksSync = GoogleTasksSync(GoogleTasksApi(http), db.taskDao(), settings) { requestReschedule() }
 
-    val notifier = ReminderNotifier(app)
+    /** Verbindung zur Uhr-App (Wear OS). Ohne Uhr oder ohne Google-Dienste passiert darin einfach nichts. */
+    val watch = WatchLink(app, scope)
+    /** Abgleich der Übersicht („Heute“ und Unterseiten) mit der Uhr-App – schreibt nur, wenn sich etwas geändert hat. */
+    val watchSync = WatchSync(
+        app, scope, watch, settings, calendar, birthdays, health, db.taskDao(), db.routineDao(), db.foodDao(),
+    )
+    val notifier = ReminderNotifier(app, watch)
     /** Meldungen des Medikamentenspenders (Memio Go über iDispenser), mitgelesen aus deren Benachrichtigungen. */
     val dispenser = DispenserRepository(db.dispenserDao(), routines) { key -> notifier.cancelKey(key) }
     val reminderEngine = ReminderEngine(app, calendar, birthdays, db.taskDao(), db.routineDao(), db.reminderDao(), settings)
+    /** Knöpfe einer Erinnerung (Schlummern, Erledigt, Keine weiteren, OK) – für Benachrichtigung und Uhr dieselbe Logik. */
+    val reminderActions = ReminderActionHandler(notifier, reminderEngine, tasks, routines)
+    /** Klingel-Weiche: stellt fällige Erinnerungen je nach Einstellung auf der Uhr und/oder am Handy zu. */
+    val reminderDelivery = ReminderDelivery(watch, notifier)
     val refresher = DataRefresher(settings, health, tasksSync, reminderEngine, scope)
 
     val secrets = SecretStore(app)
@@ -121,14 +141,19 @@ class AppContainer(val app: Application) {
 
     private var rescheduleJob: Job? = null
 
-    /** Plant Erinnerungen neu; mehrere schnelle Aufrufe werden zusammengefasst. */
+    /**
+     * Plant Erinnerungen neu; mehrere schnelle Aufrufe werden zusammengefasst. Was die Erinnerungen ändert, ändert
+     * auch die Übersicht auf der Uhr – sie wird gleich mit abgeglichen (ohne Uhr passiert dabei nichts).
+     */
     @Synchronized
     fun requestReschedule() {
         rescheduleJob?.cancel()
         rescheduleJob = scope.launch {
             delay(300)
             runCatching { reminderEngine.reschedule() }
-                .onFailure { Log.e("AppContainer", "Neuplanung fehlgeschlagen", it) }
+                // Ein Abbruch ist kein Fehler: Der nächste Aufruf hat diese Neuplanung abgelöst.
+                .onFailure { if (it !is CancellationException) Log.e("AppContainer", "Neuplanung fehlgeschlagen", it) }
         }
+        watchSync.requestSync()
     }
 }

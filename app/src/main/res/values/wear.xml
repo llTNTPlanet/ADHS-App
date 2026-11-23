@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Daran erkennt die Uhr-App, auf welchem Handy die Handy-App installiert ist. Der Name muss genau so heißen. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@array/android_wear_capabilities">
+    <string-array name="android_wear_capabilities" translatable="false" tools:ignore="UnusedResources">
+        <item>adhs_phone</item>
+    </string-array>
+</resources>

@@ -392,6 +392,9 @@ fun SettingsScreen(onBack: () -> Unit, onOpenSetup: () -> Unit) {
                 s.alarmClockMode,
             ) { v -> vm.update { it.copy(alarmClockMode = v) } }
 
+            // Uhr (Wear OS): wo Erinnerungen klingeln und was die Uhr-App zeigt
+            WatchSettingsSection(s, vm::update)
+
             // Medikamentenspender (Memio Go)
             DispenserSettingsSection(s, vm::update)
 
@@ -447,7 +450,8 @@ fun SettingsScreen(onBack: () -> Unit, onOpenSetup: () -> Unit) {
             Section("Über")
             Text("ADHS App ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium)
             Text(
-                "Alle Daten bleiben auf deinem Handy. Kalender und Kontakte kommen aus deinem Google-Konto auf dem Gerät, " +
+                "Alle Daten bleiben auf deinem Handy. Nutzt du die Uhr-App, gehen Erinnerungen und die Übersicht an deine " +
+                    "gekoppelte Uhr. Kalender und Kontakte kommen aus deinem Google-Konto auf dem Gerät, " +
                     "Gesundheitsdaten werden nur gelesen.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

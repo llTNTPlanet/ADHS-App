@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ADHS App</string>
+    <string name="channel_ring_name">Erinnerungen</string>
+    <string name="channel_ring_description">Termine, Medikamente und Aufgaben vom Handy. Die Uhr vibriert dazu selbst.</string>
+    <string name="channel_fallback_name">Erinnerungen (Ersatz-Klingeln)</string>
+    <string name="channel_fallback_description">Nur wenn die Uhr-App nicht selbst klingeln darf: Dann vibriert die Benachrichtigung.</string>
+</resources>

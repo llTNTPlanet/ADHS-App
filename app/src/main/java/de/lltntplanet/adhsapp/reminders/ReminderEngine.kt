@@ -19,6 +19,7 @@ import de.lltntplanet.adhsapp.data.routines.RoutineLogic
 import de.lltntplanet.adhsapp.data.settings.SettingsRepository
 import de.lltntplanet.adhsapp.util.Dates
 import de.lltntplanet.adhsapp.util.Permissions
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
@@ -165,7 +166,11 @@ class ReminderEngine(
 
     private suspend fun scheduleNextLocked(now: Long, fired: Set<String>) {
         val pending = runCatching { collect(now - LOOKBACK, now + LOOKAHEAD) }
-            .onFailure { Log.e(TAG, "Erinnerungen konnten nicht gesammelt werden", it) }
+            .onFailure {
+                // Ein Abbruch heißt nicht „keine Erinnerungen“: weiterreichen, sonst würde unten der Alarm gelöscht.
+                if (it is CancellationException) throw it
+                Log.e(TAG, "Erinnerungen konnten nicht gesammelt werden", it)
+            }
             .getOrElse { emptyList() }
             .filter { !isBlocked(it, fired) && (it.triggerAt > now || ReminderPlanner.isDue(it, now)) }
         val next = pending.minOfOrNull { it.triggerAt }

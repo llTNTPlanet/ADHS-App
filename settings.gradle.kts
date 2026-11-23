@@ -22,3 +22,7 @@ dependencyResolutionManagement {
 
 rootProject.name = "ADHS-App"
 include(":app")
+// Gemeinsames Datenformat für Handy und Uhr
+include(":shared")
+// Begleit-App für Wear OS (Pixel Watch)
+include(":wear")

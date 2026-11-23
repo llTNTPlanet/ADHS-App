@@ -50,6 +50,8 @@ jobs:
           echo "code=$((GITHUB_RUN_NUMBER + 1))" >> "$GITHUB_OUTPUT"
           echo "name=1.0.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
 
+      # assembleRelease baut die Handy-App (:app) und die Uhr-App (:wear) – beide mit demselben Schlüssel
+      # und denselben Versionsnummern.
       - name: Tests und signierte APK
         run: >
           ./gradlew testDebugUnitTest assembleRelease
@@ -59,9 +61,34 @@ jobs:
       - name: Signatur prüfen
         run: |
           APK=app/build/outputs/apk/release/app-release.apk
+          WATCH_APK=wear/build/outputs/apk/release/wear-release.apk
           test -f "$APK" || { echo "::error::Signierte APK fehlt"; exit 1; }
-          APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/apksigner"
-          "$APKSIGNER" verify --print-certs "$APK" | grep -i "SHA-1"
+          test -f "$WATCH_APK" || { echo "::error::Signierte Uhr-APK fehlt ($WATCH_APK)"; exit 1; }
+          # apksigner aus den neuesten Build-Tools nehmen, die ihn wirklich enthalten.
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          APKSIGNER=""
+          for dir in $(ls -d "$SDK"/build-tools/*/ | sort -rV); do
+            if [ -x "${dir}apksigner" ]; then
+              APKSIGNER="${dir}apksigner"
+              break
+            fi
+          done
+          test -n "$APKSIGNER" || { echo "::error::apksigner nicht gefunden (gesucht unter $SDK/build-tools)"; exit 1; }
+          "$APKSIGNER" verify --print-certs "$APK" > phone-certs.txt \
+            || { cat phone-certs.txt; echo "::error::Signatur der Handy-APK ist ungültig"; exit 1; }
+          "$APKSIGNER" verify --print-certs "$WATCH_APK" > watch-certs.txt \
+            || { cat watch-certs.txt; echo "::error::Signatur der Uhr-APK ist ungültig"; exit 1; }
+          grep -i "SHA-1" phone-certs.txt
+          # Handy- und Uhr-App finden sich nur, wenn beide mit demselben Zertifikat signiert sind.
+          PHONE_CERT="$(grep -i "certificate SHA-256 digest" phone-certs.txt | awk '{print $NF}' | sort -u || true)"
+          WATCH_CERT="$(grep -i "certificate SHA-256 digest" watch-certs.txt | awk '{print $NF}' | sort -u || true)"
+          test -n "$PHONE_CERT" || { echo "::error::Zertifikat der Handy-APK nicht lesbar"; cat phone-certs.txt; exit 1; }
+          test -n "$WATCH_CERT" || { echo "::error::Zertifikat der Uhr-APK nicht lesbar"; cat watch-certs.txt; exit 1; }
+          if [ "$PHONE_CERT" != "$WATCH_CERT" ]; then
+            echo "::error::Uhr-APK und Handy-APK sind nicht mit demselben Zertifikat signiert – die beiden Apps würden sich nicht finden."
+            exit 1
+          fi
+          echo "Uhr-APK: gleiches Zertifikat wie die Handy-APK."
 
       - name: Release-Notizen
         env:
@@ -76,6 +103,8 @@ jobs:
             else
               git log --no-merges --pretty='- %s' -n 20
             fi
+            echo
+            echo "Uhr-App (Wear OS): adhs-watch.zip entpacken und adhs-watch.apk per adb auf der Uhr installieren – Anleitung im README, Abschnitt „Uhr-App“."
           } > release-notes.md
           cat release-notes.md
 
@@ -85,7 +114,14 @@ jobs:
           NAME: ${{ steps.version.outputs.name }}
         run: |
           cp app/build/outputs/apk/release/app-release.apk adhs-app.apk
-          gh release create "v$NAME" adhs-app.apk \
+          # Die Uhr-APK kommt nur als Zip ans Release. Am Release darf nie ein zweites .apk hängen:
+          # Ältere Handy-Versionen nehmen das erste .apk als Update – und bekämen sonst womöglich die Uhr-App.
+          mkdir -p watch-release
+          cp wear/build/outputs/apk/release/wear-release.apk watch-release/adhs-watch.apk
+          rm -f adhs-watch.zip
+          zip -j adhs-watch.zip watch-release/adhs-watch.apk
+          unzip -l adhs-watch.zip
+          gh release create "v$NAME" adhs-app.apk adhs-watch.zip \
             --title "ADHS App $NAME" \
             --notes-file release-notes.md \
             --target "$GITHUB_SHA"

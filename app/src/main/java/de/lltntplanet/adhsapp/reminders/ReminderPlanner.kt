@@ -3,6 +3,7 @@ package de.lltntplanet.adhsapp.reminders
 import de.lltntplanet.adhsapp.data.birthdays.Birthday
 import de.lltntplanet.adhsapp.data.birthdays.BirthdayMath
 import de.lltntplanet.adhsapp.data.calendar.EventInstance
+import de.lltntplanet.adhsapp.data.db.Repeat
 import de.lltntplanet.adhsapp.data.db.RoutineEntity
 import de.lltntplanet.adhsapp.data.db.RoutineKind
 import de.lltntplanet.adhsapp.data.db.RoutineLogEntity
@@ -171,7 +172,7 @@ object ReminderPlanner {
         tasks.mapNotNull { t ->
             val at = TaskLogic.reminderAt(t, settings.taskDefaultMinutes, zone) ?: return@mapNotNull null
             Reminder(
-                key = "task:${t.id}:${t.dueEpochDay}:${t.dueMinutes ?: -1}",
+                key = taskKey(t),
                 kind = ReminderKind.TASK,
                 triggerAt = at,
                 title = t.title,
@@ -181,6 +182,18 @@ object ReminderPlanner {
                 refId = t.id,
             )
         }
+
+    /** Schlüssel der Erinnerung an eine Aufgabe: Aufgabe, Fälligkeitstag und Uhrzeit (-1 = ohne Uhrzeit). */
+    fun taskKey(t: TaskEntity): String = "task:${t.id}:${t.dueEpochDay}:${t.dueMinutes ?: -1}"
+
+    /**
+     * Gehört die Erinnerung mit dem Schlüssel [key] noch zum aktuellen Termin der Aufgabe? Wiederkehrende Aufgaben
+     * rücken beim Abhaken auf den nächsten Termin. Eine Erinnerung vom alten Termin (z. B. noch auf der Uhr) darf sie
+     * dann nicht ein zweites Mal weiterschalten. Bei allen anderen Aufgaben ist doppeltes Abhaken harmlos; die Uhrzeit
+     * zählt nicht, nur der Tag.
+     */
+    fun isCurrentTaskReminder(key: String, task: TaskEntity): Boolean =
+        task.repeat == Repeat.NONE || task.dueEpochDay == null || key.startsWith("task:${task.id}:${task.dueEpochDay}:")
 
     /**
      * Routinen und Medikamente: eine Erinnerung je Uhrzeit und Tag. Schon abgehakte oder übersprungene

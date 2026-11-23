@@ -95,7 +95,7 @@ class ReminderActivity : ComponentActivity() {
             finish()
             return
         }
-        startAlert()
+        if (!isSilent(intent)) startAlert()
         setContent {
             AdhsTheme(darkTheme = true) {
                 val current = reminders.firstOrNull()
@@ -113,6 +113,19 @@ class ReminderActivity : ComponentActivity() {
             }
         }
         closeWhenDoneElsewhere()
+        closeWhenRemovedElsewhere()
+    }
+
+    /**
+     * Auf der Uhr, in der Benachrichtigung oder vom Medikamentenspender erledigt: Die Erinnerung verschwindet auch
+     * hier, und das Klingeln hört auf.
+     */
+    private fun closeWhenRemovedElsewhere() {
+        lifecycleScope.launch {
+            container.notifier.removed.collect { originKey ->
+                reminders.filter { (it.originKey ?: it.key) == originKey }.forEach(::closeReminder)
+            }
+        }
     }
 
     /** Hakt der Medikamentenspender (oder die App an anderer Stelle) eine Einnahme ab, verschwindet ihre Erinnerung. */
@@ -130,7 +143,7 @@ class ReminderActivity : ComponentActivity() {
         super.onNewIntent(intent)
         val before = reminders.size
         addReminders(intent)
-        if (reminders.size > before) startAlert()
+        if (reminders.size > before && !isSilent(intent)) startAlert()
     }
 
     override fun onStop() {
@@ -167,9 +180,18 @@ class ReminderActivity : ComponentActivity() {
         }
     }
 
+    /** Aus der stillen Benachrichtigung geöffnet (die Uhr klingelt schon): anzeigen, aber nicht klingeln. */
+    private fun isSilent(intent: Intent?): Boolean = intent?.getBooleanExtra(EXTRA_SILENT, false) == true
+
+    /** Hier bestätigt: Benachrichtigung entfernen (die Uhr erfährt es darüber auch) und schließen. */
     private fun handled(r: Reminder) {
-        player.stop()
         container.notifier.cancel(r)
+        closeReminder(r)
+    }
+
+    /** Nur noch aus dem Vollbild nehmen und das Klingeln beenden. */
+    private fun closeReminder(r: Reminder) {
+        player.stop()
         reminders.remove(r)
         if (reminders.isEmpty()) finish()
     }
@@ -188,7 +210,12 @@ class ReminderActivity : ComponentActivity() {
     private fun done(r: Reminder) {
         val id = r.refId
         if (r.kind == ReminderKind.TASK && id != null) {
-            container.scope.launch { container.tasks.setDone(id, true) }
+            container.scope.launch {
+                val task = container.tasks.byId(id) ?: return@launch
+                // Wie beim Knopf der Benachrichtigung: Eine wiederkehrende Aufgabe, die schon weitergerückt ist
+                // (woanders abgehakt), schaltet diese Erinnerung vom alten Termin nicht noch einmal weiter.
+                if (ReminderPlanner.isCurrentTaskReminder(r.originKey ?: r.key, task)) container.tasks.setDone(task, true)
+            }
         } else if (r.kind.isRoutine && id != null) {
             val at = r.targetTime ?: r.triggerAt
             container.scope.launch { container.routines.setDoneAt(id, at) }
@@ -231,10 +258,13 @@ class ReminderActivity : ComponentActivity() {
 
     companion object {
         private const val EXTRA_REMINDERS = "reminders"
+        private const val EXTRA_SILENT = "silent"
 
-        fun intent(context: Context, reminders: List<Reminder>): Intent =
+        /** [silent] = true: Das Vollbild zeigt die Erinnerungen nur an und klingelt nicht (die Uhr klingelt schon). */
+        fun intent(context: Context, reminders: List<Reminder>, silent: Boolean = false): Intent =
             Intent(context, ReminderActivity::class.java)
                 .putExtra(EXTRA_REMINDERS, GoogleJson.encodeToString(reminders))
+                .putExtra(EXTRA_SILENT, silent)
                 .addFlags(Intent.FLAG_ACTIVITY_NO_USER_ACTION)
     }
 }

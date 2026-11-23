@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Daran erkennt die Handy-App, auf welcher Uhr die Uhr-App installiert ist. -->
+    <string-array name="android_wear_capabilities" translatable="false" tools:ignore="UnusedResources">
+        <item>adhs_watch</item>
+    </string-array>
+</resources>
